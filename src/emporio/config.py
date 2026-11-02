@@ -21,6 +21,8 @@ POLICIES_PDF = RAW_DIR / "politicas_da_loja.pdf"
 CHROMA_DIR = STORAGE_DIR / "chroma"
 EMBEDDING_CACHE_DIR = STORAGE_DIR / "models"
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+HANDOFFS_FILE = STORAGE_DIR / "handoffs.jsonl"
+MEMORY_DB = STORAGE_DIR / "memory.sqlite"
 
 TIMEZONE = "America/Campo_Grande"
 DEFAULT_LLM_MODEL = "google_genai:gemini-flash-latest"

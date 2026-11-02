@@ -14,9 +14,10 @@ import logging
 from collections.abc import Callable
 from typing import Any, Literal
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, tool
 
-from emporio import clock
+from emporio import clock, handoff
 from emporio.data.repository import Repository, get_repository
 from emporio.formatting import brl, date_br
 from emporio.rag import retriever as policy_retriever
@@ -524,6 +525,49 @@ def search_policies(question: str) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- hand-off
+
+
+@tool(parse_docstring=True)
+@_safe
+def handoff_to_human(
+    reason: handoff.HandoffReason,
+    summary: str,
+    config: RunnableConfig,
+    contact: str | None = None,
+) -> dict:
+    """Encaminha o atendimento para a equipe humana e gera um protocolo. Use quando: o pedido
+    está atrasado ou parado (recommended_action = "handoff"), o cliente quer cancelar, o frete
+    precisa de cotação (item de grande porte), há garantia ou defeito a intermediar, o cliente
+    reclama ou pede para falar com uma pessoa, ou há pedido sobre dados pessoais (LGPD).
+
+    Confirme com o cliente antes de encaminhar (exceto se ele mesmo pediu um humano). Depois,
+    informe o protocolo, o prazo de retorno e, se a loja estiver fechada, quando a equipe volta.
+    Não use para dúvidas que as outras tools respondem.
+
+    Args:
+        reason: "reclamacao", "pedido_atrasado", "cotacao_frete", "garantia", "cancelamento",
+            "lgpd" ou "outro".
+        summary: Resumo curto para a equipe: o que o cliente quer, número do pedido e o que já
+            foi verificado.
+        contact: E-mail ou telefone para retorno, se o cliente informou.
+    """
+    if not summary.strip():
+        return _error("Preciso de um resumo do caso para encaminhar.")
+    session_id = (config.get("configurable") or {}).get("thread_id")
+    created = handoff.create_handoff(reason, summary, contact, session_id)
+    status = clock.store_status()
+    payload: dict[str, Any] = {
+        "ok": True,
+        "protocol": created.protocol,
+        "sla": handoff.SLA,
+        "store_open_now": status.is_open,
+    }
+    if not status.is_open and status.next_opening is not None:
+        payload["next_human_window"] = clock.describe_moment(status.next_opening)
+    return payload
+
+
 DATA_TOOLS: list[BaseTool] = [
     search_products,
     get_product,
@@ -534,3 +578,7 @@ DATA_TOOLS: list[BaseTool] = [
 ]
 
 POLICY_TOOLS: list[BaseTool] = [search_policies]
+
+HANDOFF_TOOLS: list[BaseTool] = [handoff_to_human]
+
+ALL_TOOLS: list[BaseTool] = DATA_TOOLS + POLICY_TOOLS + HANDOFF_TOOLS
