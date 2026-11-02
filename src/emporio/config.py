@@ -17,6 +17,11 @@ PROCESSED_DIR = DATA_DIR / "processed"
 STORAGE_DIR = ROOT_DIR / "storage"
 DOCS_DIR = ROOT_DIR / "docs"
 
+POLICIES_PDF = RAW_DIR / "politicas_da_loja.pdf"
+CHROMA_DIR = STORAGE_DIR / "chroma"
+EMBEDDING_CACHE_DIR = STORAGE_DIR / "models"
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
 TIMEZONE = "America/Campo_Grande"
 DEFAULT_LLM_MODEL = "google_genai:gemini-flash-latest"
 
