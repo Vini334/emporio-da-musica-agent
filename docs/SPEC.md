@@ -86,6 +86,7 @@ src/emporio/
   cli.py             # entrypoint emporio-chat
 eval/
   cases.yaml         # casos de avaliação
+  checks.py          # checagens determinísticas de um turno (tools, argumentos, trechos)
   run.py             # runner → docs/eval_results.md
 tests/               # pytest: prepare, rules, tools, clock
 examples/            # 5 conversas .md geradas pela CLI
@@ -273,7 +274,8 @@ parte do roteamento (R4).
 - `returns`: o pedido 4 está fora de todos os prazos, com caminho `garantia_fabricante`; casos de borda com `EMPORIO_NOW` simulado dentro dos 7 e dos 30 dias.
 - `clock`: domingo, feriado e sábado depois das 13h dão "fechado", com `next_opening` correto.
 
-**Avaliação do agente** (`uv run python -m eval.run`), com cerca de 25 casos em `eval/cases.yaml`:
+**Avaliação do agente** (`uv run python -m eval.run`), com 33 casos em `eval/cases.yaml` (formato
+completo no cabeçalho do arquivo; as expectativas podem ser por turno):
 
 ```yaml
 - id: promo-inativa-takamine
@@ -323,7 +325,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | 3 | RAG: ingestão, retriever, `search_policies` | ✅ |
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ✅ |
 | 5 | 5 exemplos + README completo | ✅ |
-| 6 | Suíte de avaliação + `eval_results.md` | ⬜ |
+| 6 | Suíte de avaliação + `eval_results.md` | ✅ |
 | 7 | Streamlit + LLM como juiz (se der tempo) | ⬜ |
 
 **Definição de pronto da entrega:** fases 0–5 concluídas, `pytest` verde, README revisado,
