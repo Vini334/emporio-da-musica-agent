@@ -77,7 +77,8 @@ src/emporio/
     orders.py        # acesso verificado, atraso/parado (BR-08, BR-09)
   rag/
     ingest.py        # PDF → trechos por seção → embeddings → Chroma  (python -m emporio.rag.ingest)
-    retriever.py
+    lexical.py       # BM25 com stemming leve (metade lexical da busca híbrida)
+    retriever.py     # busca híbrida: densa (Chroma) + BM25, fundidas por RRF
   handoff.py         # fila + protocolo
   tools.py           # wrappers LangChain @tool sobre rules/ e repository (só tradução de I/O)
   prompts.py         # system prompt + contexto dinâmico
@@ -213,13 +214,15 @@ parte do roteamento (R4).
 ## 7. RAG das políticas
 
 - **Ingestão** (`python -m emporio.rag.ingest`, idempotente; roda automaticamente na primeira execução se o índice não existir):
-  1. `pypdf` extrai o texto por página.
-  2. Divide pelos cabeçalhos numerados (`^\d+(\.\d+)?\s+Título`), gerando um trecho por subseção. Seções curtas sem subseção viram um trecho só.
-  3. Metadados: `section` ("4.1"), `title`, `page`.
-  4. Prefixa o título no texto embutido, para melhorar a recuperação.
-- **Embeddings:** `fastembed` com um modelo multilíngue pequeno (alvo: `paraphrase-multilingual-MiniLM-L12-v2`; confirmar na implementação qual está disponível no fastembed).
-- **Armazenamento:** Chroma persistente em `storage/chroma`, coleção `policies`.
-- **Consulta:** top-3 por similaridade. A tool devolve os trechos com a seção, para o agente fundamentar a resposta.
+  1. `pypdf` extrai o texto em modo **layout** (uma linha por linha visual), sem o cabeçalho corrido e o rodapé "Página N". A capa fica de fora (contatos estão no prompt).
+  2. Divide pelos cabeçalhos numerados que começam na coluna 0 (`^\d+(\.\d+)?\.?\s+Título`), aceitando só o **próximo número da sequência**: os itens numerados da §7.2 (indentados) e números soltos ("13.709/2018") não viram cabeçalho. Um trecho por subseção; a introdução de uma seção com subseções vira trecho próprio se não for vazia; seção sem subseção é um trecho só. Resultado: **25 trechos**.
+  3. Linhas quebradas são reunidas; células de tabela viram `a | b | c` (tabelas das seções 2, 3 e 5.2 validadas em teste).
+  4. Metadados: `section` ("4.1"), `title`, `parent_title`, `page`.
+  5. Prefixa "seção-mãe — número título" no texto embutido, para melhorar a recuperação.
+  6. Idempotência: a coleção guarda um fingerprint (hash do PDF + modelo + versão do chunker) e só é recriada quando ele muda (`--force` recria sempre).
+- **Embeddings:** `fastembed` com `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384 dim., ~220 MB, baixado uma vez para `storage/models`).
+- **Armazenamento:** Chroma persistente em `storage/chroma`, coleção `policies` (cosseno).
+- **Consulta híbrida** (`DD-§4`): ranking denso (Chroma) + ranking lexical (BM25 sobre texto sem acento, stopwords removidas, radical = 5 primeiras letras), fundidos por Reciprocal Rank Fusion (k = 10). Top-3. A tool devolve os trechos com a seção, para o agente fundamentar a resposta.
 - **Cuidados:**
   - As tabelas do PDF saem achatadas pelo `pypdf`: validar o texto extraído das seções 2, 3 e 5.2.
   - Contatos e horário (BR-11, BR-12) também ficam no prompt, por serem críticos e curtos. O RAG cobre o resto.
@@ -316,7 +319,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | 0 | Scaffold, dados brutos, decisões, dependências, repositório público | ✅ |
 | 1 | `data/prepare.py` + camada processada + `docs/data_quality_report.md` + testes | ✅ |
 | 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ✅ |
-| 3 | RAG: ingestão, retriever, `search_policies` | ⬜ |
+| 3 | RAG: ingestão, retriever, `search_policies` | ✅ |
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ⬜ |
 | 5 | 5 exemplos + README completo | ⬜ |
 | 6 | Suíte de avaliação + `eval_results.md` | ⬜ |

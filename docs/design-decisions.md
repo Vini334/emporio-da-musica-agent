@@ -36,6 +36,8 @@ Text-to-SQL ficou registrado como evolução, para perguntas abertas sobre o cat
 - Embeddings **locais e multilíngues** via `fastembed` (ONNX, sem PyTorch), guardadas no **Chroma** persistente. Não exige uma segunda chave de API nem depende do provedor do LLM.
 - Fica exposto como a tool `search_policies(question)`: o agente decide **quando** consultar.
 - Para 8 páginas, colocar o manual inteiro no prompt também funcionaria. O RAG foi escolhido para escalar para manuais maiores e para deixar explícita a decisão de quando consultar política e quando consultar dados.
+- **Busca híbrida (decidida na fase 3):** só com embeddings, o MiniLM multilíngue acertou a seção esperada no top-3 em 14 de 20 perguntas de teste. Errou justamente o vocabulário próprio da loja: "parcelar em quantas vezes" (não trouxe a §3.1), "boquilha" (§4.4), "trocar a cor" (§4.3), "boleto" (§3), "frete para Dourados" e "chegou quebrado" (§5.2). Somando um BM25 com radical de 5 letras ("parcelar" ≈ "Parcelamento") e fundindo os dois rankings por RRF, foram **20 de 20**. Com 25 trechos, o BM25 em memória não custa nada. Alternativas descartadas: modelo maior (mpnet, ~1 GB de download para quem avalia) e palavras-chave escritas à mão por seção (manutenção manual a cada versão do manual).
+- **Extração em modo layout do `pypdf`:** o modo padrão devolve uma palavra por linha, o que apaga a diferença entre cabeçalho ("4.1 …" na coluna 0) e item numerado de lista (indentado). No modo layout essa diferença sobrevive, e as tabelas saem com colunas separadas por espaços largos, que viram `a | b | c`.
 
 ## 5. Tratamento de dados
 
