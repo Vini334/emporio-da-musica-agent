@@ -4,12 +4,14 @@ and writes ``docs/eval_results.md``.
     uv run python -m eval.run                       # all cases
     uv run python -m eval.run --only pedido-sem-contato,promo-inativa-takamine
     uv run python -m eval.run --category preco --delay 5
+    uv run python -m eval.run --judge                # + LLM as judge for tone (eval/judge.py)
 
 Each case runs in a fresh conversation (its own thread in an in-memory checkpointer) with the
 clock pinned through ``EMPORIO_NOW``. Hand-offs go to a temporary queue, so the evaluation never
 touches ``storage/handoffs.jsonl``. A turn whose model call failed (rate limit after the retries,
 network) is reported as an *error*, not as a failure of the agent. The exit code is 1 when any
-case fails or errors, so the runner can gate a CI job.
+case fails or errors, so the runner can gate a CI job. The judge's scores are informative and do
+not affect the status or the exit code.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from emporio import config
 from emporio.agent import MODEL_ERROR_REPLY, Assistant, Reply, build_agent
 from eval.checks import Expect, check_turn
+from eval.judge import CRITERIA, ToneScore, build_judge, judge_case, judge_model_name
 
 EVAL_DIR = Path(__file__).resolve().parent
 CASES_FILE = EVAL_DIR / "cases.yaml"
@@ -52,6 +55,7 @@ CATEGORY_LABELS = {
     "multi_turno": "Multi-turno",
 }
 EXCERPT_CHARS = 700
+LOWEST_TONE_CASES = 5
 
 
 # --------------------------------------------------------------------------- cases
@@ -127,6 +131,7 @@ class CaseResult:
     now: str
     seconds: float
     turns: list[TurnResult] = field(default_factory=list)
+    tone: ToneScore | None = None  # filled only with --judge
 
     @property
     def status(self) -> str:
@@ -175,7 +180,12 @@ def _is_model_error(reply: Reply) -> bool:
 _STATUS_ICONS = {"passou": "✅", "falhou": "❌", "erro": "⚠️"}
 
 
-def render_report(results: list[CaseResult], model: str, started_at: datetime) -> str:
+def render_report(
+    results: list[CaseResult],
+    model: str,
+    started_at: datetime,
+    judge_model: str | None = None,
+) -> str:
     total = len(results)
     counts = Counter(r.status for r in results)
     passed = counts["passou"]
@@ -244,7 +254,60 @@ def render_report(results: list[CaseResult], model: str, started_at: datetime) -
                     excerpt = excerpt[: EXCERPT_CHARS - 1] + "…"
                 lines.append(f"  - resposta: > {excerpt}")
         lines.append("")
+    if judge_model:
+        lines += render_tone_section(results, judge_model)
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_tone_section(results: list[CaseResult], judge_model: str) -> list[str]:
+    judged = [r for r in results if r.tone and r.tone.scores]
+    skipped = len(results) - len(judged)
+    lines = [
+        "## Tom e cordialidade (LLM como juiz)",
+        "",
+        f"Notas de 1 a 5 dadas por `{judge_model}` a cada conversa, com a rubrica de "
+        "[`eval/judge.py`](../eval/judge.py) (persona da Dó, manual §7.1). O juiz avalia só a "
+        "forma, não a correção dos dados, e **não** altera o resultado dos casos acima.",
+        "",
+    ]
+    if not judged:
+        return lines + ["Nenhum caso avaliado.", ""]
+    lines += [
+        f"- Casos avaliados: {len(judged)}"
+        + (f" ({skipped} sem nota por erro do modelo ou do juiz)" if skipped else ""),
+        f"- **Média geral: {_mean(r.tone.mean for r in judged)}**",
+        "",
+        "| Critério | Média | Notas ≤ 3 |",
+        "|---|---:|---:|",
+    ]
+    for key, label in CRITERIA.items():
+        values = [r.tone.scores[key] for r in judged]
+        low = sum(value <= 3 for value in values)
+        lines.append(f"| {label} | {_mean(values)} | {low} |")
+
+    lines += [
+        "",
+        "| Categoria | " + " | ".join(CRITERIA.values()) + " |",
+        "|---|" + "---:|" * len(CRITERIA),
+    ]
+    for category, label in CATEGORY_LABELS.items():
+        group = [r for r in judged if r.category == category]
+        if group:
+            means = [_mean(r.tone.scores[key] for r in group) for key in CRITERIA]
+            lines.append(f"| {label} | " + " | ".join(means) + " |")
+
+    lowest = sorted(judged, key=lambda r: (r.tone.mean, r.id))[:LOWEST_TONE_CASES]
+    lines += ["", f"### As {len(lowest)} conversas com as menores notas", ""]
+    for r in lowest:
+        scores = " · ".join(f"{CRITERIA[k].lower()} {v}" for k, v in r.tone.scores.items())
+        lines.append(f"- `{r.id}` ({scores}): {r.tone.comment}")
+    lines.append("")
+    return lines
+
+
+def _mean(values) -> str:
+    values = list(values)
+    return f"{sum(values) / len(values):.1f}".replace(".", ",") if values else "—"
 
 
 def _pct(part: int, whole: int) -> str:
@@ -264,6 +327,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--raw", type=Path, default=RAW_FILE, help="respostas completas (JSON)")
     parser.add_argument(
         "--delay", type=float, default=0.0, help="pausa em segundos entre casos (rate limit)"
+    )
+    parser.add_argument(
+        "--judge", action="store_true", help="avalia o tom de cada conversa com um LLM como juiz"
+    )
+    parser.add_argument(
+        "--judge-model", help="modelo do juiz (padrão: JUDGE_MODEL ou, sem ele, LLM_MODEL)"
     )
     return parser.parse_args(argv)
 
@@ -290,6 +359,8 @@ def main(argv: list[str] | None = None) -> int:
 
     started_at = datetime.now()
     model = config.llm_model()
+    judge_model = (args.judge_model or judge_model_name()) if args.judge else None
+    judge = build_judge(judge_model) if judge_model else None
     results: list[CaseResult] = []
     with tempfile.TemporaryDirectory() as tmp:
         config.HANDOFFS_FILE = Path(tmp) / "handoffs.jsonl"
@@ -298,10 +369,12 @@ def main(argv: list[str] | None = None) -> int:
             if index > 1 and args.delay:
                 time.sleep(args.delay)
             result = run_case(case, agent)
+            if judge is not None:
+                result.tone = judge_case(judge, result)
             results.append(result)
             print(
                 f"[{index:>2}/{len(cases)}] {_STATUS_ICONS[result.status]} {case.id} "
-                f"({result.seconds:.0f} s)",
+                f"({result.seconds:.0f} s){_tone_suffix(result.tone)}",
                 flush=True,
             )
             for turn in result.turns:
@@ -311,13 +384,22 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"        - erro: {turn.error}", flush=True)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render_report(results, model, started_at), encoding="utf-8")
+    report = render_report(results, model, started_at, judge_model)
+    args.output.write_text(report, encoding="utf-8")
     args.raw.parent.mkdir(parents=True, exist_ok=True)
     raw = [asdict(r) | {"status": r.status} for r in results]
     args.raw.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
     passed = sum(r.status == "passou" for r in results)
     print(f"\n{passed}/{len(results)} casos passaram · relatório em {args.output}")
     return 0 if passed == len(results) else 1
+
+
+def _tone_suffix(tone: ToneScore | None) -> str:
+    if tone is None:
+        return ""
+    if tone.scores:
+        return f" · tom {tone.mean:.1f}"
+    return f" · juiz: {tone.error}"
 
 
 if __name__ == "__main__":
