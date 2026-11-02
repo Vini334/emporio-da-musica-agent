@@ -790,6 +790,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
     { name = "rich" },
+    { name = "tzdata" },
 ]
 
 [package.optional-dependencies]
@@ -822,6 +823,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.4" },
     { name = "rapidfuzz", specifier = ">=3.14.6" },
     { name = "rich", specifier = ">=15.0.0" },
+    { name = "tzdata", specifier = ">=2026.6" },
 ]
 provides-extras = ["anthropic", "openai"]
 
