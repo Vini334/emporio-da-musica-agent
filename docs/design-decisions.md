@@ -86,12 +86,24 @@ reproduzíveis.
   3. Prompt injection ou engenharia social: recusa.
 - **A defesa real está nas tools**: o modelo não tem acesso à tabela de clientes nem a qualquer forma de "aplicar desconto". Um classificador de entrada separado ficou como evolução.
 
-## 9. Qualidade
+## 9. Agente e interface (fase 4)
+
+- **`create_agent` do LangChain 1.x** (um grafo ReAct do LangGraph) com middlewares, em vez de um `StateGraph` escrito à mão: o laço agente ↔ tools é o padrão, e os pontos de extensão necessários já existem como middleware.
+  - `dynamic_prompt`: o prompt é remontado a **cada chamada do modelo**, então o bloco do relógio (agora, loja aberta ou fechada, quando a equipe volta) nunca fica velho numa conversa longa.
+  - `ModelRetryMiddleware`: 3 novas tentativas com backoff exponencial (5 s, 10 s, 20 s) para o rate limit do free tier do Gemini. Se todas falharem, o cliente recebe uma mensagem amigável com o WhatsApp da loja, e não um stack trace.
+  - `ToolCallLimitMiddleware`: no máximo 8 chamadas de tool por turno, com o modelo encerrando a resposta (em vez de um erro) se passar disso.
+- **Modelo:** `gemini-flash-latest`, confirmado listando os modelos com a chave em 02/11/2026. É um alias que acompanha o Flash estável mais recente; para fixar uma versão, basta trocar o `LLM_MODEL`. Temperatura 0,2.
+- **`session_id` na passagem para humano:** a tool lê o `thread_id` do `RunnableConfig` injetado pelo LangChain (o argumento não aparece no schema que o LLM vê). O modelo não tem como escolher nem forjar a sessão.
+- **Protocolo `EMP-AAAAMMDD-NNNN`:** sequência por dia, calculada a partir do próprio `handoffs.jsonl` (fonte única, sem contador separado), com um lock para escritas concorrentes no mesmo processo.
+- **`Assistant.send()`** devolve o texto e as chamadas de tool do turno (nome, argumentos, resultado). A CLI, o transcript e a avaliação (fase 6) usam a mesma interface, sem depender do formato interno das mensagens do LangGraph.
+- **CLI por stdin:** sem terminal interativo, cada linha é uma mensagem. Os exemplos saem de um comando reproduzível (`printf ... | emporio-chat --now ... --transcript ...`), não de uma sessão digitada à mão.
+
+## 10. Qualidade
 
 - Testes unitários das tools e da preparação de dados (`pytest`).
 - Suíte de avaliação com cerca de 25 casos (YAML): checagens determinísticas (tool esperada, números que devem ou não aparecer). LLM como juiz para o tom, se houver tempo.
 
-## 10. Entrega
+## 11. Entrega
 
 - 5 conversas em `examples/`, geradas pelo agente real com `EMPORIO_NOW` fixo:
   1. catálogo até R$1000;

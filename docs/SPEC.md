@@ -255,6 +255,7 @@ parte do roteamento (R4).
 - Mensagens com `rich`. Com `--verbose`, cada chamada de tool aparece (nome, argumentos e resumo do resultado) num estilo apagado.
 - `--transcript` salva a conversa em Markdown, com as chamadas de tool, e é **o mecanismo que gera os exemplos** da §13.
 - Comandos: `/nova` (nova sessão), `/sair`.
+- Sem terminal interativo (stdin redirecionado), cada linha não vazia vira uma mensagem do cliente. É assim que os exemplos são gerados de forma reproduzível.
 - Streamlit (fase 7, opcional): a mesma `build_agent()` com um painel lateral de chamadas de tool.
 
 ## 11. Passagem para humano
@@ -320,7 +321,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | 1 | `data/prepare.py` + camada processada + `docs/data_quality_report.md` + testes | ✅ |
 | 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ✅ |
 | 3 | RAG: ingestão, retriever, `search_policies` | ✅ |
-| 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ⬜ |
+| 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ✅ |
 | 5 | 5 exemplos + README completo | ⬜ |
 | 6 | Suíte de avaliação + `eval_results.md` | ⬜ |
 | 7 | Streamlit + LLM como juiz (se der tempo) | ⬜ |
