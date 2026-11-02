@@ -53,7 +53,7 @@ via tools, e passa para um humano o que não consegue resolver.
  catálogo  pedidos/devolução/pagamento   search_policies     handoff_to_human
    │         │  (regras de negócio)          │ (RAG)            │
    ▼         ▼                              ▼                   ▼
- data/processed  ◄── prepare_data ◄── data/raw    storage/chroma     storage/handoffs.jsonl
+ data/processed  ◄── prepare ◄───── data/raw    storage/chroma     storage/handoffs.jsonl
 ```
 
 ### Layout de módulos
@@ -63,8 +63,11 @@ src/emporio/
   config.py          # .env, caminhos, LLM_MODEL, EMPORIO_NOW
   clock.py           # now(), is_open(), next_opening(), feriados (America/Campo_Grande)
   formatting.py      # R$ 1.234,56 · dd/mm/aaaa · status em pt-BR
+  text.py            # normalização (sem acento, minúsculo) compartilhada por prepare e busca
   data/
-    prepare.py       # raw → processed + docs/data_quality_report.md   (python -m emporio.data.prepare)
+    prepare.py       # raw → processed (JSON por tabela + páginas do manual)   (python -m emporio.data.prepare)
+    quality.py       # verificações de qualidade → achados (Finding)
+    report.py        # docs/data_quality_report.md
     repository.py    # carrega processed; consultas puras (sem LLM)
   rules/
     pricing.py       # promoção, PIX, parcelamento (BR-03..06)
@@ -309,7 +312,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | Fase | Entrega | Status |
 |---|---|---|
 | 0 | Scaffold, dados brutos, decisões, dependências, repositório público | ✅ |
-| 1 | `data/prepare.py` + camada processada + `docs/data_quality_report.md` + testes | ⬜ |
+| 1 | `data/prepare.py` + camada processada + `docs/data_quality_report.md` + testes | ✅ |
 | 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ⬜ |
 | 3 | RAG: ingestão, retriever, `search_policies` | ⬜ |
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ⬜ |
@@ -334,7 +337,7 @@ Levantados na análise inicial. O `prepare` precisa detectar cada um e o relató
 - **Pedidos**
   - Total ≠ soma dos itens: pedido 3 (3450 vs 3498) e pedido 20 (1400 vs 1488).
   - Parcela abaixo do mínimo da §3.1: pedidos 9, 16 e 18.
-  - PIX sem desconto no total: pedidos 1, 5, 10 e 13.
+  - PIX sem desconto no total: pedidos 1, 5, 10 e 13 (e o 17, cancelado, com o mesmo problema).
   - Atrasado em relação a 02/11/2026: pedido 8. Parados: 9–12 e 13–16.
 - **Clientes:** e-mail duplicado `bruno.martins@jmail.com` (ids 11 e 43).
 - **Promoções**

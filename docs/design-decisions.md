@@ -39,8 +39,9 @@ Text-to-SQL ficou registrado como evolução, para perguntas abertas sobre o cat
 
 ## 5. Tratamento de dados
 
-O **bruto fica intocado** (`data/raw`). O script `prepare_data.py` gera uma **camada padronizada**
-(`data/processed`) e o **`data_quality_report.md`**.
+O **bruto fica intocado** (`data/raw`). O script `python -m emporio.data.prepare` gera uma
+**camada padronizada** (`data/processed`, um JSON por tabela) e o
+[`data_quality_report.md`](data_quality_report.md).
 
 - **Padronização técnica (feita):** tipos, enums de status, parse do JSON de specs, nome normalizado para busca (sem acento, minúsculo) e nomes de arquivo sem espaço e acento.
 - **Correção de conteúdo (não feita):** nada é reescrito nem recalculado. O registro é marcado e uma regra de negócio é aplicada:
