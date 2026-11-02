@@ -322,7 +322,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ✅ |
 | 3 | RAG: ingestão, retriever, `search_policies` | ✅ |
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ✅ |
-| 5 | 5 exemplos + README completo | ⬜ |
+| 5 | 5 exemplos + README completo | ✅ |
 | 6 | Suíte de avaliação + `eval_results.md` | ⬜ |
 | 7 | Streamlit + LLM como juiz (se der tempo) | ⬜ |
 
