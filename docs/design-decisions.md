@@ -114,6 +114,23 @@ reproduzíveis.
 - **Calibração:** a primeira rodada deu 29/33. Três falhas eram da suíte (sinônimo faltando, um trecho proibido que casava com a negação, "temos violino" dentro de "não temos violinos", e um caso de boquilha que não faz sentido numa loja sem sopros) e foram corrigidas nos casos. A quarta era do agente: na devolução fora do prazo, ele não dizia qual caminho ainda valia (BR-10). Isso foi corrigido no **prompt** (situação especial "troca ou devolução fora do prazo"), não afrouxando o caso. A segunda rodada completa deu 33/33.
 - **LLM como juiz ficou de fora** desta fase: as checagens determinísticas cobrem o que é regra de negócio; tom e cordialidade ficaram para a fase 7.
 
+**LLM como juiz (decidido na fase 7):**
+
+- **Só forma, nunca conteúdo.** O que é regra de negócio já tem checagem determinística; pedir a um LLM para julgar preço ou prazo traria ruído e duplicaria a fonte de verdade. A rubrica do juiz manda ignorar a correção dos dados e não penalizar as recusas previstas (desconto, dados de terceiros, fora do escopo), só a simpatia delas.
+- **Quatro critérios, de 1 a 5, tirados do próprio prompt** (persona e tom da §9): tom, cordialidade, concisão (estilo WhatsApp, sem jargão interno) e encaminhamento (próximo passo, uma pergunta por vez). Nota por critério, e não uma nota única, para a média apontar *o que* melhorar.
+- **Saída estruturada** (`with_structured_output` com um modelo Pydantic, `ge=1, le=5`) e temperatura 0, com retry para o rate limit. Uma falha do juiz vira "sem nota" no caso e não interrompe a rodada.
+- **O juiz vê os nomes das tools, não os JSONs.** Assim ele sabe que a resposta foi fundamentada sem ser tentado a conferir números.
+- **Informativo, sem gate.** As notas não mudam o status nem o código de saída: com um juiz do mesmo modelo que respondeu, há viés de autopreferência (tende a dar nota alta), e um limiar fixo viraria um gate frágil. Mitigação: `--judge-model`/`JUDGE_MODEL` permite usar outro provedor; a rubrica pede severidade ("um 5 deve ser difícil de melhorar"). **Calibração:** uma resposta deliberadamente ruim (fria, com jargão interno e sem próximo passo) recebeu 1 nos quatro critérios, então o juiz discrimina; o teto alto nas conversas reais é, em parte, mérito do prompt e, em parte, esse viés.
+- **Calibração da suíte nesta fase:** a rodada de teste do juiz pegou um falso negativo em `horario-feriado` ("a equipe está de folga" é correto, mas não continha "fechad"). Os sinônimos foram adicionados ao caso, com o mesmo critério da fase 6: corrigir a suíte quando a resposta está certa, e o prompt quando não está. A rodada completa seguinte deu 32/33, com um desvio real: em `politica-itens-sem-troca` a busca trouxe a §4.4 em 1º e o modelo generalizou que "todos podem ser trocados". A correção foi uma regra **geral** no prompt (usar todos os trechos, inclusive exceções e itens não elegíveis, e nunca generalizar contra eles), não um texto específico do caso; o caso passou 4 de 4 repetições e a rodada final deu 33/33, com média 4,9 do juiz.
+
+**Interface Streamlit (decidida na fase 7):**
+
+- **Mesma `build_agent()` e mesmo `Assistant.send()`** da CLI e da avaliação: a interface web não tem lógica própria de agente. O grafo compilado fica em `st.cache_resource` (um por servidor) e cada sessão do navegador tem o seu `session_id` na mesma memória SQLite.
+- **Painel lateral de tools por turno** (o mais recente aberto), com a assinatura da chamada e o JSON do resultado: é o equivalente visual do `--verbose` e o que torna o roteamento (R4) visível numa demo.
+- **Relógio simulável** na barra lateral, para demonstrar loja fechada, feriado e prazos sem mexer no `.env`. Ele grava `EMPORIO_NOW` no ambiente do processo, o que vale para todas as abas: aceitável numa demo local, documentado no código e na SPEC. Num deploy multiusuário, o relógio iria por sessão (por exemplo, no `RunnableConfig`).
+- **Streamlit como dependência principal**, não extra opcional: um único `uv sync` deixa a CLI e a web prontas; o custo é o tamanho da instalação.
+- **Testes com `AppTest`** e o mesmo modelo roteirizado dos testes do agente: turno com tool, painel, sugestões, nova conversa e relógio, sem LLM nem navegador.
+
 ## 11. Entrega
 
 - 5 conversas em `examples/`, geradas pelo agente real com `EMPORIO_NOW` fixo:

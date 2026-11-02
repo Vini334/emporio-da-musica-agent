@@ -40,7 +40,7 @@ via tools, e passa para um humano o que não consegue resolver.
 ## 4. Arquitetura
 
 ```
-             ┌──────────────────────────────── CLI (rich) / Streamlit (opcional)
+             ┌──────────────────────────────── CLI (rich) / Streamlit
              │
         ┌────▼─────┐   prompt dinâmico (persona + regras + relógio de Campo Grande)
         │  Agente  │◄─ checkpointer SQLite (memória por session_id)
@@ -84,11 +84,13 @@ src/emporio/
   prompts.py         # system prompt + contexto dinâmico
   agent.py           # build_agent(): grafo + checkpointer
   cli.py             # entrypoint emporio-chat
+  web.py             # chat Streamlit (entrypoint emporio-web)
 eval/
   cases.yaml         # casos de avaliação
   checks.py          # checagens determinísticas de um turno (tools, argumentos, trechos)
+  judge.py           # LLM como juiz do tom (opcional, --judge)
   run.py             # runner → docs/eval_results.md
-tests/               # pytest: prepare, rules, tools, clock
+tests/               # pytest: prepare, rules, tools, clock, agente, avaliação, web
 examples/            # 5 conversas .md geradas pela CLI
 ```
 
@@ -257,7 +259,10 @@ parte do roteamento (R4).
 - `--transcript` salva a conversa em Markdown, com as chamadas de tool, e é **o mecanismo que gera os exemplos** da §13.
 - Comandos: `/nova` (nova sessão), `/sair`.
 - Sem terminal interativo (stdin redirecionado), cada linha não vazia vira uma mensagem do cliente. É assim que os exemplos são gerados de forma reproduzível.
-- Streamlit (fase 7, opcional): a mesma `build_agent()` com um painel lateral de chamadas de tool.
+- **Streamlit** (`emporio-web`, fase 7): a mesma `build_agent()` e a mesma memória SQLite; cada
+  aba do navegador é uma sessão. Barra lateral com modelo, sessão, relógio simulável
+  (`EMPORIO_NOW`, vale para o processo), status da loja, "Nova conversa" e o **painel de chamadas
+  de tool** por turno (assinatura + JSON do resultado). Sugestões de perguntas na tela inicial.
 
 ## 11. Passagem para humano
 
@@ -290,7 +295,13 @@ completo no cabeçalho do arquivo; as expectativas podem ser por turno):
 
 - **Categorias:** catálogo, preço/promoção, pagamento, pedido+LGPD, devolução, políticas/RAG, horário, fora do escopo, injection, multi-turno.
 - **Saída:** `docs/eval_results.md` com uma tabela de aprovação por categoria.
-- **Opcional** (fase 7): LLM como juiz para o tom e a cordialidade.
+- **LLM como juiz** (fase 7, `--judge`; `eval/judge.py`): nota de 1 a 5 por conversa em **tom**,
+  **cordialidade**, **concisão** e **encaminhamento** (persona da §9 e manual §7.1), com saída
+  estruturada (Pydantic) e temperatura 0. O juiz vê as mensagens e os nomes das tools, não os
+  JSONs, e **não** avalia a correção dos dados. As notas são informativas: não mudam o status dos
+  casos nem o código de saída. Modelo: `--judge-model`, `JUDGE_MODEL` ou, sem eles, `LLM_MODEL`.
+  O relatório ganha uma seção com as médias por critério e por categoria e as 5 conversas com as
+  menores notas.
 
 ## 13. Conversas de exemplo (`examples/`)
 
@@ -326,7 +337,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ✅ |
 | 5 | 5 exemplos + README completo | ✅ |
 | 6 | Suíte de avaliação + `eval_results.md` | ✅ |
-| 7 | Streamlit + LLM como juiz (se der tempo) | ⬜ |
+| 7 | Streamlit + LLM como juiz (se der tempo) | ✅ |
 
 **Definição de pronto da entrega:** fases 0–5 concluídas, `pytest` verde, README revisado,
 repositório público, sem commits depois do prazo.

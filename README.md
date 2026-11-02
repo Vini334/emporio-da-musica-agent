@@ -69,8 +69,11 @@ uv run python -m emporio.data.prepare
 #    Na primeira vez baixa o modelo de embeddings (~220 MB) para storage/models.
 uv run python -m emporio.rag.ingest
 
-# 5. conversar
+# 5. conversar no terminal...
 uv run emporio-chat
+
+# ...ou no navegador (Streamlit), com o painel de chamadas de tool ao lado
+uv run emporio-web
 ```
 
 Opções da CLI:
@@ -90,15 +93,23 @@ printf 'Oi, cadê meu pedido 8?\nanacarol.ferreira@coldmail.com\n' \
   | uv run emporio-chat --now 2026-11-07T15:00 --verbose --transcript /tmp/teste.md
 ```
 
+**Interface web** (`uv run emporio-web`, abre em <http://localhost:8501>): a mesma Dó da CLI
+(mesmo agente, mesma memória). Na barra lateral ficam o modelo e a sessão, um **relógio
+simulável** (para ver a loja fechada, um feriado ou um pedido atrasado sem mexer no `.env`), o
+status da loja, o botão "Nova conversa" e o **painel de chamadas de tool** de cada turno, com os
+argumentos e o JSON devolvido. A tela inicial sugere quatro perguntas para começar.
+
 **Outro provedor de LLM:** o agente usa `init_chat_model`, então basta trocar o `LLM_MODEL` no
 `.env` e instalar o extra correspondente, por exemplo `uv sync --extra anthropic` com
 `LLM_MODEL=anthropic:claude-haiku-5-5` e `ANTHROPIC_API_KEY`.
 
-**Testes:** `uv run pytest` (224 testes, sem LLM nem rede).
+**Testes:** `uv run pytest` (236 testes, sem LLM nem rede).
 
 **Avaliação do agente** (usa o LLM de verdade; ~6 min no free tier):
 `uv run python -m eval.run` (ou `--only id1,id2`, `--category preco`). Gera
-[`docs/eval_results.md`](docs/eval_results.md).
+[`docs/eval_results.md`](docs/eval_results.md). Com `--judge`, um LLM como juiz também dá notas
+de tom e cordialidade a cada conversa (`--judge-model` ou `JUDGE_MODEL` para usar outro modelo
+como juiz).
 
 ## 2. Arquitetura
 
@@ -209,11 +220,12 @@ em cada transcrição.
 
 ## 6. Testes e avaliação
 
-- **Testes unitários** (`uv run pytest`, 224 testes, sem LLM): preparação de dados (os achados
+- **Testes unitários** (`uv run pytest`, 236 testes, sem LLM): preparação de dados (os achados
   esperados aparecem no relatório), regras de preço e parcelamento, frete, verificação de pedido,
   atraso e pedido parado, prazos de devolução com relógio simulado, horário e feriados, divisão do
   manual em trechos (inclusive as tabelas), recuperação das seções certas para 20 perguntas, tools,
-  protocolo de passagem para humano e a montagem do agente com um modelo falso.
+  protocolo de passagem para humano, a montagem do agente com um modelo falso, o juiz e a
+  interface Streamlit (com `AppTest`).
 - **Avaliação do agente ponta a ponta** (`uv run python -m eval.run`): 33 casos em
   [`eval/cases.yaml`](eval/cases.yaml), cada um citando a regra (BR-nn) ou a armadilha de dados que
   testa. Cada caso roda contra o modelo real, numa conversa nova e com o relógio fixado, e as
@@ -223,7 +235,7 @@ em cada transcrição.
   ser por turno: em "cadê meu pedido 13?" o agente não pode chamar `get_order` no turno 1 e tem
   que chamar no turno 2, depois do telefone.
 
-Resultado ([`docs/eval_results.md`](docs/eval_results.md), Gemini Flash, 02/11/2026):
+Resultado ([`docs/eval_results.md`](docs/eval_results.md), Gemini Flash, 02/11/2026, rodada final da fase 7):
 
 | Categoria | Casos | Passaram |
 |---|---:|---:|
@@ -245,7 +257,28 @@ temos violinos") e um caso mal desenhado (troca de boquilha, sendo que a loja n�
 agente respondeu, com razão, que a compra deve ter sido em outra loja). A quarta era um desvio real
 da BR-10: com a devolução fora do prazo, o agente dava a data certa mas não dizia qual caminho
 ainda valia (garantia do fabricante). Isso foi corrigido no prompt, e a segunda rodada completa deu
-33/33. 100% numa execução não quer dizer 100% sempre: ver as limitações abaixo.
+33/33. Na fase 7, uma nova rodada deu 32/33: em `politica-itens-sem-troca` o modelo recebeu a §4.4
+(itens não elegíveis) da busca e mesmo assim generalizou que "todos podem ser trocados". A regra
+geral de usar todos os trechos, inclusive as exceções, entrou no prompt; o caso passou 4 de 4
+repetições e a rodada final completa (com o juiz) deu 33/33. 100% numa execução não quer dizer 100%
+sempre: ver as limitações abaixo.
+
+**Tom e cordialidade (LLM como juiz, `--judge`):** cada conversa recebe nota de 1 a 5 em tom,
+cordialidade, concisão e encaminhamento ([`eval/judge.py`](eval/judge.py)). O juiz avalia só a
+forma (a correção dos dados é das checagens acima) e não altera o resultado dos casos.
+
+| Critério | Média (33 conversas) |
+|---|---:|
+| Tom | 4,9 |
+| Cordialidade | 5,0 |
+| Concisão | 4,9 |
+| Encaminhamento | 4,9 |
+
+As notas mais baixas apontam deslizes reais de estilo: mensagem longa demais numa negativa de
+devolução, o slogan entre aspas soando engessado, "equipe humana" soando mecânico. Como o juiz é o
+mesmo modelo que responde, há viés de autopreferência: uma resposta propositalmente ruim (fria, com
+jargão interno) levou 1 nos quatro critérios, então ele discrimina, mas as notas altas devem ser
+lidas com esse desconto (ver [`design-decisions.md`](docs/design-decisions.md)).
 
 ## 7. Limitações conhecidas e próximos passos
 
@@ -267,13 +300,16 @@ Limitações observadas no protótipo:
   prazos.
 - **Passagem para humano** grava numa fila local (`storage/handoffs.jsonl`), não num sistema de
   tickets; a memória é por sessão, não por cliente identificado.
-- **Sem canal real:** a CLI simula o WhatsApp. O free tier do Gemini tem limite de requisições por
+- **Sem canal real:** a CLI e a interface Streamlit simulam o WhatsApp. O relógio simulado da
+  interface web vale para o processo inteiro (todas as abas), o que serve para uma demo local, não
+  para vários usuários. O free tier do Gemini tem limite de requisições por
   minuto (há retry com backoff, mas conversas longas em sequência podem esperar).
 
 Com mais tempo:
 
 1. Rodar a avaliação no CI a cada mudança de prompt ou de modelo (o runner já sai com código 1
-   quando algo falha), com várias repetições por caso e LLM como juiz para tom e cordialidade.
+   quando algo falha), com várias repetições por caso e o juiz num modelo de outro provedor, para
+   tirar o viés de autopreferência e poder usar as notas de tom como gate.
 2. Um reranker (cross-encoder) ou um modelo de embeddings maior no RAG, medido pela mesma bateria
    de perguntas.
 3. Uma etapa de verificação depois da resposta: checar que cada valor em R$ e cada data do texto
