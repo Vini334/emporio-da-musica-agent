@@ -70,6 +70,7 @@ src/emporio/
     report.py        # docs/data_quality_report.md
     repository.py    # carrega processed; consultas puras (sem LLM)
   rules/
+    catalog.py       # disponibilidade e alternativas (BR-01, BR-02)
     pricing.py       # promoção, PIX, parcelamento (BR-03..06)
     shipping.py      # frete (BR-07)
     returns.py       # elegibilidade de troca/devolução (BR-10)
@@ -133,10 +134,10 @@ A tool devolve o **máximo de parcelas permitido** e o valor da parcela.
 **BR-07 Frete**
 - Campo Grande: grátis **acima** de R$ 500,00; até R$ 500,00 inclusive, R$ 35,00; 1–3 dias úteis; entregue por motoboy.
 - Outras cidades: PAC (5–12 dias úteis), SEDEX (2–5), Jadlog (3–8), com seguro incluído. O **valor** é calculado pelo CEP no fechamento: o agente não inventa número.
-- Itens de grande porte (categoria 3, baterias acústicas; pianos digitais; contrabaixo acústico): frete especial, com cotação feita por um humano.
+- Itens de grande porte (categoria 3, baterias acústicas; pianos digitais; contrabaixo acústico): frete especial, com cotação feita por um humano, **inclusive em Campo Grande** (`DD-§6`).
 
 **BR-08 Acesso a pedidos (LGPD)**
-- `get_order` exige `order_id` **e** um contato (e-mail ou telefone) que bata com o cliente do pedido. E-mail é comparado sem diferenciar maiúsculas; telefone, só pelos dígitos.
+- `get_order` exige `order_id` **e** um contato (e-mail ou telefone) que bata com o cliente do pedido. E-mail é comparado sem diferenciar maiúsculas; telefone, só pelos dígitos, com DDD obrigatório e `+55` opcional.
 - Se não bater, a resposta é genérica ("não encontrei pedido com esses dados"), **sem revelar** se o pedido existe.
 - `list_my_orders` busca só pelo telefone (o e-mail `bruno.martins@jmail.com` é duplicado, ids 11 e 43).
 - Nunca são expostos dados de outro cliente nem campos do cadastro além do primeiro nome.
@@ -161,7 +162,8 @@ motivo em `notes`).
   - depois de 90 dias: garantia do fabricante (6 meses a 2 anos, conforme o certificado), com a loja podendo intermediar.
   - Não cobre mau uso, queda, umidade ou modificação.
 - **Inelegíveis** (não detectáveis nos dados; o agente pergunta ou avisa): itens personalizados ou com setup sob encomenda, itens de "venda final" em liquidação, boquilhas.
-- A tool devolve: `eligible`, `path` (`devolucao | troca | garantia_legal | garantia_fabricante | cancelamento | aguardar_entrega`), `deadline` (data limite), `reasoning` (texto curto com as datas usadas) e `recommended_action`.
+- Se o prazo do motivo pedido (arrependimento ou preferência) venceu, a tool devolve `eligible = false` e, em `path`, o caminho de defeito que ainda valeria hoje (ex.: pedido 4 → `garantia_fabricante`), para o agente orientar o cliente.
+- A tool devolve: `eligible`, `path` (`devolucao | troca | garantia_legal | garantia_fabricante | cancelamento | aguardar_entrega`, ou nulo para pedido cancelado), `deadline` (data limite), `reasoning` (texto curto com as datas usadas), `recommended_action`, `all_deadlines` (os quatro prazos calculados) e `caveats` (condições e itens inelegíveis).
 
 **BR-11 Horário de funcionamento** (America/Campo_Grande, UTC-4)
 - Seg–sex 09:00–18:00; sábado 09:00–13:00; domingo e feriados fechado.
@@ -196,7 +198,7 @@ Todas devolvem um JSON (dict) curto e em português nos campos de texto. Erros e
 
 | Tool | Entrada | Saída (campos principais) |
 |---|---|---|
-| `search_products` | `query?: str`, `category?: str` (nome ou id), `min_price?`, `max_price?: float`, `only_available: bool = True`, `limit: int = 6` | `items[]`: `id, name, category, price, promo{percent, final_price}?, pix_price?, availability, specs_summary`; `total_found` |
+| `search_products` | `query?: str`, `category?: str` (nome ou id), `min_price?`, `max_price?: float`, `only_available: bool = True`, `limit: int = 6` | `items[]`: `id, name, category, price, promo{percent, final_price}?, pix_price?, installments, availability, specs_summary, price_note?`; `total_found`; `note?` (categoria vazia, lista cortada); `not_available[]?` (o termo bate só com itens que não podem ser vendidos). Com `max_price`, compara o **menor** preço possível (PIX ou promoção) e ordena do mais próximo do orçamento para baixo (`DD-§6`) |
 | `get_product` | `name_or_id: str` (busca fuzzy, `rapidfuzz` + normalização sem acento) | o mesmo item acima + `description?` (só se não houver conflito) + `alternatives[]` (BR-02) quando não está disponível; se ambíguo, `candidates[]` |
 | `get_order` | `order_id: int`, `contact: str` | `order_id, status_label, order_date, items[], total, payment_label, tracking_code?, estimated_delivery?, notes?, is_late, is_stale, recommended_action?` |
 | `list_my_orders` | `phone: str` | `orders[]` (id, data, status_label, total) |
@@ -313,7 +315,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 |---|---|---|
 | 0 | Scaffold, dados brutos, decisões, dependências, repositório público | ✅ |
 | 1 | `data/prepare.py` + camada processada + `docs/data_quality_report.md` + testes | ✅ |
-| 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ⬜ |
+| 2 | `rules/` + `repository.py` + `tools.py` + `clock.py` + testes | ✅ |
 | 3 | RAG: ingestão, retriever, `search_policies` | ⬜ |
 | 4 | Prompt, agente, memória, passagem para humano, CLI (`--verbose`, `--transcript`) | ⬜ |
 | 5 | 5 exemplos + README completo | ⬜ |

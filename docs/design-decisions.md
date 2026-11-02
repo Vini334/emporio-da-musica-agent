@@ -62,6 +62,11 @@ O **bruto fica intocado** (`data/raw`). O script `python -m emporio.data.prepare
 | Frete fora da região metropolitana não tem tabela | Calcula só a região metropolitana (grátis **acima** de R$500, senão R$35). Fora dela, informa as modalidades e prazos e não inventa valor; item de grande porte vai para cotação com um humano |
 | "Mais de 300 instrumentos", sopros e cordas orquestrais | Vale o **sistema** (65 produtos; categorias 6–8 vazias). O agente nunca afirma ter o que não está na base |
 | Black Friday em novembro (§6.1) e promoções inativas no CSV | Vale o **sistema** (§7.3): só é aplicada promoção com `is_active=1` |
+| Frete especial de itens de grande porte aparece só na §5.2 (outras cidades) | Vale **em qualquer cidade**, inclusive Campo Grande: na dúvida, é melhor um humano cotar do que prometer frete grátis por motoboy para uma bateria acústica |
+| "Pedidos acima de R$ 500" para frete grátis | Compara o preço com a promoção aplicada, antes do desconto do PIX (o meio de pagamento ainda não está definido na conversa) |
+| Arredondamento de parcelas e descontos | Centavos com arredondamento "meio para cima", como em recibos (349,90 em 4x = R$ 87,48) |
+| Orçamento ("violões até R$ 1000") | O teto compara o **menor** preço possível (PIX ou promoção), e a lista mostra primeiro os itens mais próximos do orçamento; o total encontrado vai junto para o agente oferecer refinar |
+| Telefone informado pelo cliente | Só os dígitos contam; `+55` é opcional e o DDD é obrigatório (sem DDD não verifica, para não confundir clientes) |
 
 ## 7. Data, hora e horário de funcionamento
 
