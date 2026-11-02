@@ -1,4 +1,4 @@
-"""LangChain tools over ``rules/`` and the repository (SPEC §6).
+"""LangChain tools over ``rules/``, the repository and the policies RAG (SPEC §6).
 
 Tools only translate I/O: validate arguments, call the rules, and serialize a short pt-BR JSON
 with money and dates already formatted (BR-15). Expected errors become
@@ -19,6 +19,7 @@ from langchain_core.tools import BaseTool, tool
 from emporio import clock
 from emporio.data.repository import Repository, get_repository
 from emporio.formatting import brl, date_br
+from emporio.rag import retriever as policy_retriever
 from emporio.rules import catalog, orders, pricing, returns, shipping
 
 logger = logging.getLogger(__name__)
@@ -489,6 +490,40 @@ def check_return_eligibility(
     return payload
 
 
+# --------------------------------------------------------------------------- policies (RAG)
+
+
+@tool(parse_docstring=True)
+@_safe
+def search_policies(question: str) -> dict:
+    """Busca no manual de políticas da loja os trechos que respondem a uma dúvida sobre regras:
+    trocas e devoluções, garantia, frete e prazos de entrega em geral, formas de pagamento e
+    regras de parcelamento, regras de promoções (cumulatividade, Black Friday), rastreamento,
+    privacidade/LGPD e o que a loja vende ou não vende. Toda afirmação sobre política precisa
+    vir desta tool, nunca da memória.
+
+    NÃO use para preço, estoque ou promoção de um produto (use get_product/search_products),
+    para valores de parcela, PIX ou frete de uma compra (use calculate_payment), nem para um
+    pedido específico (use get_order ou check_return_eligibility). Pergunta mista ("o violão X
+    tem garantia e quanto custa?") pede as duas consultas. Contatos e horário já estão no seu
+    contexto: prefira-os ao que aparecer aqui.
+
+    Resuma e aplique os trechos para o cliente; não cole o texto do manual (é documento
+    interno).
+
+    Args:
+        question: A dúvida do cliente reescrita como pergunta autossuficiente, em português
+            (ex.: "prazo para devolver por arrependimento").
+    """
+    if not question.strip():
+        return _error("Preciso da dúvida do cliente para consultar o manual.")
+    chunks = policy_retriever.get_retriever().search(question)
+    return {
+        "ok": True,
+        "chunks": [{"section": c.section, "title": c.title, "text": c.text} for c in chunks],
+    }
+
+
 DATA_TOOLS: list[BaseTool] = [
     search_products,
     get_product,
@@ -497,3 +532,5 @@ DATA_TOOLS: list[BaseTool] = [
     list_my_orders,
     check_return_eligibility,
 ]
+
+POLICY_TOOLS: list[BaseTool] = [search_policies]
