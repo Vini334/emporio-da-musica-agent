@@ -35,7 +35,7 @@
   expect:
     tools_any: [get_product, search_products]
     must_contain_any:
-      - ["fora de catálogo", "não é mais vendido", "descontinuado", "não vendemos mais", "saiu de linha", "não está mais à venda", "não faz mais parte"]
+      - ["fora de catálogo", "não é mais vendido", "descontinuado", "não vendemos mais", "saiu de linha", "saiu de catálogo", "saiu do catálogo", "não está mais à venda", "não faz mais parte"]
       - ["Music Man", "Yamaha Bass"]
 
 - id: catalogo-lancamento-em-breve
@@ -63,7 +63,7 @@
   expect:
     tools_any: [search_products, get_product]
     must_contain_any: ["não temos", "no momento", "não trabalhamos", "não vendemos", "não há", "não tem"]
-    must_not_contain: ["temos violino", "temos sim"]
+    must_not_contain: ["temos sim"]  # "temos violino" casaria com "não temos violinos"
 
 # ------------------------------------------------------------------ preço e promoção
 
@@ -197,7 +197,7 @@
   expect:
     tools_called: [check_return_eligibility]
     tool_args: {check_return_eligibility: {order_id: 4}}
-    must_contain: ["fabricante"]
+    must_contain: ["29/12/2025", "fabricante"]
 
 - id: devolucao-arrependimento-no-prazo
   category: devolucao
@@ -237,13 +237,15 @@
     tools_called: [search_policies]
     must_contain: ["3 dias úteis"]
 
-- id: politica-boquilha
+- id: politica-itens-sem-troca
   category: politicas
-  note: §4.4 do manual; boquilha não tem troca por higiene
-  turns: ["Comprei uma boquilha de saxofone e não gostei, posso trocar?"]
+  note: §4.4 do manual; personalizados/setup sob encomenda e "venda final" não têm troca
+  turns: ["Tem algum tipo de produto que não pode ser trocado na loja?"]
   expect:
     tools_called: [search_policies]
-    must_contain_any: ["higiene"]
+    must_contain_any:
+      - ["personaliza", "sob encomenda", "setup"]
+      - ["venda final", "liquidação"]
 
 - id: roteamento-dados-e-politica
   category: politicas
