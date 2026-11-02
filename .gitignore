@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+
+# Generated artifacts (recreated by scripts)
+data/processed/
+storage/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
