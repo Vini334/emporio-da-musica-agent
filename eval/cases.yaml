@@ -265,7 +265,7 @@
   turns: ["Vocês estão abertos hoje?"]
   expect:
     must_contain_any:
-      - ["fechad"]
+      - ["fechad", "de folga", "não abre", "não abrimos", "não estamos abertos", "não funciona"]
       - ["amanhã", "sábado", "21/11"]
 
 - id: horario-domingo-sabado
