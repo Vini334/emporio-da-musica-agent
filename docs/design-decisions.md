@@ -23,18 +23,10 @@ pré-requisitos já estavam resolvidos. Cada item traz a escolha e o porquê.
 ## 3. Acesso a dados (CSVs)
 
 **Tools determinísticas e tipadas**, sem text-to-SQL. O LLM só escolhe a tool e os argumentos;
-as regras de negócio ficam em Python, onde são testáveis:
-
-| Tool | Regras embutidas |
-|---|---|
-| `search_products` | exclui `discontinued`; marca `coming_soon`; promoção só se `is_active=1`; mostra preço original, % e preço final |
-| `get_product` | idem; suprime a descrição conflitante; se sem estoque, sugere alternativas |
-| `get_order` | exige número do pedido **e** e-mail ou telefone (LGPD); detecta atraso pela data atual |
-| `list_my_orders` | só pelo telefone (o e-mail tem duplicata na base) |
-| `check_return_eligibility` | prazos de 7, 30 e 90 dias, cada um contado a partir da data correta |
-| `calculate_payment` | PIX com 5% e não cumulativo com promoção; parcela mínima por faixa |
-| `search_policies` | RAG sobre o manual |
-| `handoff_to_human` | grava a fila em `storage/handoffs.jsonl` e devolve um protocolo |
+as regras de negócio ficam em Python, onde são testáveis. Isso torna a LGPD uma garantia do código
+(o modelo não tem como consultar a tabela de clientes), torna auditável cada número que o agente
+fala e impede que o LLM "aplique" uma promoção inativa ou acumule o PIX com uma promoção. A lista
+de tools e os contratos estão em [`SPEC.md` §6](SPEC.md#6-contratos-das-tools).
 
 Text-to-SQL ficou registrado como evolução, para perguntas abertas sobre o catálogo.
 
