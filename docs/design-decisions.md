@@ -103,6 +103,17 @@ reproduzíveis.
 - Testes unitários das tools e da preparação de dados (`pytest`).
 - Suíte de avaliação com cerca de 25 casos (YAML): checagens determinísticas (tool esperada, números que devem ou não aparecer). LLM como juiz para o tom, se houver tempo.
 
+**Avaliação ponta a ponta (decidida na fase 6):**
+
+- **33 casos** em `eval/cases.yaml`, cobrindo as 10 categorias da SPEC (§12). Cada caso cita a regra (BR-nn) ou a armadilha de dados que testa, e os valores esperados saem das tools determinísticas, não de uma redação "ideal".
+- **Checagens por turno, não só no final.** A expectativa pode estar em qualquer turno; a do caso vale para o último. Sem isso não daria para testar a LGPD em conversa: no turno 1 de "cadê meu pedido 13?" o agente **não pode** chamar `get_order`; no turno 2, com o telefone, tem que chamar.
+- **Âncoras robustas à redação:** o texto é comparado sem acento, sem maiúsculas e sem negrito; números (R$, datas, %) são as âncoras principais porque vêm das tools; `must_contain_any` aceita sinônimos ("esgotado", "sem estoque", "indisponível"); `must_not_contain` pega o erro típico (PIX acumulado com promoção, a promoção inativa aplicada, dado de outro cliente). Checar argumentos de tool (`tool_args`) confirma que o pedido consultado é o certo.
+- **Erro de infraestrutura ≠ falha do agente.** Se o modelo falhar depois das novas tentativas (rate limit do free tier), o caso sai como "erro" e não conta como falha de comportamento; o relatório mostra a taxa com e sem esses casos.
+- **Isolamento:** cada caso roda numa conversa nova (checkpointer em memória), com o relógio fixado por caso, e a fila de passagem para humano vai para um arquivo temporário. A avaliação não suja `storage/`.
+- **Código de saída 1** se algum caso falhar ou der erro, para poder virar um gate no CI.
+- **Calibração:** a primeira rodada deu 29/33. Três falhas eram da suíte (sinônimo faltando, um trecho proibido que casava com a negação, "temos violino" dentro de "não temos violinos", e um caso de boquilha que não faz sentido numa loja sem sopros) e foram corrigidas nos casos. A quarta era do agente: na devolução fora do prazo, ele não dizia qual caminho ainda valia (BR-10). Isso foi corrigido no **prompt** (situação especial "troca ou devolução fora do prazo"), não afrouxando o caso. A segunda rodada completa deu 33/33.
+- **LLM como juiz ficou de fora** desta fase: as checagens determinísticas cobrem o que é regra de negócio; tom e cordialidade ficaram para a fase 7.
+
 ## 11. Entrega
 
 - 5 conversas em `examples/`, geradas pelo agente real com `EMPORIO_NOW` fixo:
