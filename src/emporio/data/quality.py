@@ -68,12 +68,12 @@ SPECS_SCHEMAS: dict[str, frozenset[str]] = {
 NAME_COLORS = {"natural": "natural", "sunburst": "sunburst", "preto": "preto"}
 
 SECTIONS = {
-    "products": "Produtos",
-    "categories": "Categorias",
-    "promotions": "Promoções",
-    "orders": "Pedidos",
-    "customers": "Clientes",
-    "manual": "Manual de políticas (PDF)",
+    "products": "Products",
+    "categories": "Categories",
+    "promotions": "Promotions",
+    "orders": "Orders",
+    "customers": "Customers",
+    "manual": "Policy manual (PDF)",
 }
 
 
@@ -81,7 +81,7 @@ SECTIONS = {
 class Finding:
     code: str
     section: str
-    severity: str  # "conflito" | "regra" | "atenção" | "info"
+    severity: str  # "conflict" | "rule" | "warning" | "info"
     title: str
     detail: str
     treatment: str
@@ -115,18 +115,19 @@ def description_conflicts(name: str, description: str, specs: dict[str, str]) ->
     foreign = [b for b in mentions(description, BRAND_ALIASES) if b not in name_brands]
     if foreign and name_brands:
         reasons.append(
-            f"descrição cita {', '.join(foreign)}; o nome é {', '.join(sorted(name_brands))}"
+            f"description cites {', '.join(foreign)}; the name is {', '.join(sorted(name_brands))}"
         )
 
-    for unit, spec_key in (("cordas", "strings"), ("teclas", "keys")):
+    # Units are matched in Portuguese (the data's language) and reported in English.
+    for unit, spec_key, label in (("cordas", "strings", "strings"), ("teclas", "keys", "keys")):
         described = _counts(description, unit)
         reference = _counts(name, unit) or (
             {int(specs[spec_key])} if specs.get(spec_key, "").isdigit() else set()
         )
         if described and reference and described != reference:
             reasons.append(
-                f"descrição diz {join_ints(described)} {unit}; "
-                f"nome/specs dizem {join_ints(reference)}"
+                f"description says {join_ints(described)} {label}; "
+                f"name/specs say {join_ints(reference)}"
             )
 
     for spec_key in ("body", "shells"):
@@ -136,7 +137,7 @@ def description_conflicts(name: str, description: str, specs: dict[str, str]) ->
         declared = set(mentions(specs[spec_key], WOOD_ALIASES))
         if described - declared:
             reasons.append(
-                f"descrição cita {'/'.join(sorted(described))}; "
+                f"description cites {'/'.join(sorted(described))}; "
                 f"specs.{spec_key} = {specs[spec_key]}"
             )
     return reasons
@@ -149,14 +150,14 @@ def name_specs_mismatches(name: str, specs: dict[str, str]) -> list[str]:
     reasons: list[str] = []
     strings = specs.get("strings", "")
     if "nylon" in words and strings and strings != "nylon":
-        reasons.append(f"nome diz nylon; specs.strings = {strings}")
+        reasons.append(f"name says nylon; specs.strings = {strings}")
     if "aco" in words and strings and strings != "steel":
-        reasons.append(f"nome diz aço; specs.strings = {strings}")
+        reasons.append(f"name says steel (aço); specs.strings = {strings}")
     if "eletrico" in words and specs.get("electronics", "yes") != "yes":
-        reasons.append("nome diz elétrico; specs.electronics = no")
+        reasons.append("name says electric (elétrico); specs.electronics = no")
     for word, color in NAME_COLORS.items():
         if word in words and "color" in specs and normalize(specs["color"]) != color:
-            reasons.append(f"nome diz {word}; specs.color = {specs['color']}")
+            reasons.append(f"name says {word}; specs.color = {specs['color']}")
     return reasons
 
 
@@ -197,18 +198,18 @@ def check_description_conflicts(ctx: CheckContext) -> list[Finding]:
         Finding(
             code="product.description_conflict",
             section="products",
-            severity="conflito",
-            title="Descrição contradiz o nome ou as specs",
+            severity="conflict",
+            title="Description contradicts the name or the specs",
             detail=(
-                "A descrição fala de outra marca/modelo, de outra quantidade de cordas ou "
-                "teclas, ou de outra madeira."
+                "The description mentions another brand/model, another number of strings or "
+                "keys, or another wood."
             ),
             treatment=(
-                "Flag `description_conflict = true`. A descrição **não** é exposta ao cliente; "
-                "o agente usa nome + specs + preço (BR-16)."
+                "Flag `description_conflict = true`. The description is **not** shown to the "
+                "customer; the agent uses name + specs + price (BR-16)."
             ),
             ids=_ids(conflicted, "product_id"),
-            table_header=("id", "produto", "divergência"),
+            table_header=("id", "product", "mismatch"),
             table_rows=tuple(
                 (str(p["product_id"]), p["name"], "; ".join(p["description_conflict_reasons"]))
                 for p in sorted(conflicted, key=lambda p: p["product_id"])
@@ -229,12 +230,12 @@ def check_name_specs(ctx: CheckContext) -> list[Finding]:
         Finding(
             code="product.name_specs_mismatch",
             section="products",
-            severity="conflito",
-            title="Nome contradiz as specs",
-            detail="O nome do produto cita um atributo diferente do registrado nas specs.",
-            treatment="Specs prevalecem; registro mantido como está.",
+            severity="conflict",
+            title="Name contradicts the specs",
+            detail="The product name states an attribute that differs from the specs.",
+            treatment="Specs prevail; the record is kept as is.",
             ids=tuple(int(r[0]) for r in rows),
-            table_header=("id", "produto", "divergência"),
+            table_header=("id", "product", "mismatch"),
             table_rows=tuple(rows),
         )
     ]
@@ -249,15 +250,15 @@ def check_product_status(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="product.discontinued",
                 section="products",
-                severity="atenção",
-                title="Produtos descontinuados",
+                severity="warning",
+                title="Discontinued products",
                 detail="; ".join(
-                    f"{p['product_id']} {p['name']} (estoque {p['stock_quantity']})"
+                    f"{p['product_id']} {p['name']} (stock {p['stock_quantity']})"
                     for p in discontinued
                 ),
                 treatment=(
-                    "Nunca são oferecidos, mesmo com estoque; o agente informa que saíram do "
-                    "catálogo e sugere equivalentes (BR-01, BR-02; manual §7.3)."
+                    "Never offered, even with stock; the agent says they left the catalog and "
+                    "suggests equivalents (BR-01, BR-02; manual §7.3)."
                 ),
                 ids=_ids(discontinued, "product_id"),
             )
@@ -269,10 +270,10 @@ def check_product_status(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="product.active_out_of_stock",
                 section="products",
-                severity="atenção",
-                title="Ativos sem estoque",
+                severity="warning",
+                title="Active products with no stock",
                 detail="; ".join(f"{p['product_id']} {p['name']}" for p in out_of_stock),
-                treatment="Indisponível no momento + até 3 alternativas ofertáveis (BR-01, BR-02).",
+                treatment="Unavailable for now + up to 3 sellable alternatives (BR-01, BR-02).",
                 ids=_ids(out_of_stock, "product_id"),
             )
         )
@@ -285,7 +286,7 @@ def check_product_status(ctx: CheckContext) -> list[Finding]:
             {i["order_id"] for i in ctx.tables["order_items"] if i["product_id"] in coming_ids}
         )
         orders_text = (
-            "; pedidos que já o incluem: "
+            "; orders that already include it: "
             + ", ".join(f"{oid} ({orders[oid]['status']})" for oid in related)
             if related
             else ""
@@ -294,17 +295,17 @@ def check_product_status(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="product.coming_soon",
                 section="products",
-                severity="conflito" if related else "atenção",
-                title="Lançamentos (`coming_soon`)",
+                severity="conflict" if related else "warning",
+                title="Upcoming releases (`coming_soon`)",
                 detail="; ".join(
-                    f"{p['product_id']} {p['name']} (estoque {p['stock_quantity']})"
+                    f"{p['product_id']} {p['name']} (stock {p['stock_quantity']})"
                     for p in coming_soon
                 )
                 + orders_text
-                + ". Um produto ainda não lançado não deveria ter pedidos.",
+                + ". A product not yet released should not have orders.",
                 treatment=(
-                    "Apresentado como lançamento em breve, sem venda e sem prazo prometido "
-                    "(BR-01). Os pedidos existentes continuam consultáveis normalmente."
+                    "Presented as coming soon, not for sale and with no promised date (BR-01). "
+                    "Existing orders can still be looked up normally."
                 ),
                 ids=_ids(coming_soon, "product_id"),
                 related=tuple(related),
@@ -333,18 +334,18 @@ def check_specs_schemas(ctx: CheckContext) -> list[Finding]:
         Finding(
             code="product.specs_schemas",
             section="products",
-            severity="conflito" if unknown else "info",
-            title="Specs com esquemas diferentes por tipo de instrumento",
+            severity="conflict" if unknown else "info",
+            title="Specs follow different schemas per instrument type",
             detail=(
-                "O JSON de `specs` não tem um esquema único: violões/ukuleles, "
-                "guitarras/baixos, baterias e teclados usam chaves diferentes."
+                "The `specs` JSON has no single schema: acoustic guitars/ukuleles, "
+                "electric guitars/basses, drums and keyboards use different keys."
             ),
             treatment=(
-                "Specs são parseadas como dicionário e ganham o campo `specs_schema`; "
-                "o resumo exibido ao cliente é montado por esquema."
+                "Specs are parsed into a dict and get a `specs_schema` field; the summary shown "
+                "to the customer is built per schema."
             ),
             ids=unknown,
-            table_header=("esquema", "categorias", "chaves", "produtos"),
+            table_header=("schema", "categories", "keys", "products"),
             table_rows=rows,
         )
     ]
@@ -363,15 +364,15 @@ def check_specs_serialization(ctx: CheckContext) -> list[Finding]:
             code="product.different_origin",
             section="products",
             severity="info",
-            title="Lote de produtos com outra origem",
+            title="A batch of products from another source",
             detail=(
-                f"{len(odd_ids)} produtos têm o JSON de specs serializado em outro formato "
-                f'(`": "` com espaço). {overlap} dos {len(conflicted)} produtos com descrição '
-                "conflitante estão nesse lote, cujos nomes também são genéricos "
+                f"{len(odd_ids)} products have their specs JSON serialized differently "
+                f'(`": "` with a space). {overlap} of the {len(conflicted)} products with a '
+                "conflicting description are in this batch, whose names are also generic "
                 '("Bass 1X", "Kit 1 Studio", "Synth 1 Pro").'
             ),
             treatment=(
-                "Nenhuma correção; reforça a decisão de não confiar na descrição desses itens."
+                "No correction; it reinforces the decision not to trust these descriptions."
             ),
             ids=odd_ids,
         )
@@ -384,18 +385,24 @@ def check_empty_categories(ctx: CheckContext) -> list[Finding]:
     if not empty:
         return []
     policy = normalize(ctx.policy_text)
-    promised = [term for term in ("instrumentos de sopro", "cordas orquestrais") if term in policy]
-    manual_note = f" O manual (§1) diz que a loja vende {' e '.join(promised)}." if promised else ""
+    promised_terms = {
+        "instrumentos de sopro": "wind instruments",
+        "cordas orquestrais": "orchestral strings",
+    }
+    promised = [english for term, english in promised_terms.items() if term in policy]
+    manual_note = (
+        f" The manual (§1) says the store sells {' and '.join(promised)}." if promised else ""
+    )
     return [
         Finding(
             code="category.empty",
             section="categories",
-            severity="atenção",
-            title="Categorias sem nenhum produto",
+            severity="warning",
+            title="Categories without any product",
             detail="; ".join(f"{c['category_id']} {c['name']}" for c in empty) + "." + manual_note,
             treatment=(
-                "Vale o sistema: o agente nunca afirma ter itens dessas categorias e diz que "
-                "não há no momento (BR-13, DD-§6)."
+                "The system prevails: the agent never claims to have items in these categories "
+                "and says there are none for now (BR-13, DD-§6)."
             ),
             ids=_ids(empty, "category_id"),
         )
@@ -413,10 +420,10 @@ def check_promotions(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="promotion.unknown_product",
                 section="promotions",
-                severity="conflito",
-                title="Promoções de produtos inexistentes",
-                detail="Promoções que apontam para um `product_id` fora do catálogo.",
-                treatment="Ignoradas.",
+                severity="conflict",
+                title="Promotions for products that do not exist",
+                detail="Promotions pointing to a `product_id` outside the catalog.",
+                treatment="Ignored.",
                 ids=_ids(unknown, "promotion_id"),
             )
         )
@@ -427,15 +434,15 @@ def check_promotions(ctx: CheckContext) -> list[Finding]:
             code="promotion.active",
             section="promotions",
             severity="info",
-            title=f"Só {len(active)} de {len(promotions)} promoções estão ativas",
-            detail="Nenhuma promoção tem data de início/fim; `is_active` é o único sinal.",
+            title=f"Only {len(active)} of {len(promotions)} promotions are active",
+            detail="No promotion has a start/end date; `is_active` is the only signal.",
             treatment=(
-                "Só promoções com `is_active = 1` existem para o agente; as inativas nem chegam "
-                "ao LLM (BR-03)."
+                "Only promotions with `is_active = 1` exist for the agent; inactive ones never "
+                "reach the LLM (BR-03)."
             ),
             ids=_ids(active, "promotion_id"),
             related=tuple(sorted({p["product_id"] for p in active})),
-            table_header=("promoção", "produto", "desconto", "preço", "preço final"),
+            table_header=("promotion", "product", "discount", "price", "final price"),
             table_rows=tuple(
                 (
                     str(p["promotion_id"]),
@@ -464,19 +471,19 @@ def check_promotions(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="promotion.multiple_per_product",
                 section="promotions",
-                severity="atenção",
-                title="Produtos com mais de uma promoção",
+                severity="warning",
+                title="Products with more than one promotion",
                 detail="; ".join(
-                    f"produto {pid}: "
+                    f"product {pid}: "
                     + ", ".join(
                         f"#{p['promotion_id']} {p['discount_percent']:g}%"
-                        f"{' (ativa)' if p['is_active'] else ''}"
+                        f"{' (active)' if p['is_active'] else ''}"
                         for p in promos
                     )
                     for pid, promos in sorted(multiple.items())
                 )
-                + ("." if any_active else ". Todas inativas."),
-                treatment="Se houver mais de uma ativa, vale o maior desconto (BR-03).",
+                + ("." if any_active else ". All inactive."),
+                treatment="If more than one is active, the largest discount applies (BR-03).",
                 ids=tuple(sorted(multiple)),
             )
         )
@@ -495,10 +502,10 @@ def check_promotions(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="promotion.active_on_unavailable",
                 section="promotions",
-                severity="atenção",
-                title="Promoção ativa em produto indisponível",
-                detail="Promoções ativas de produtos não ofertáveis.",
-                treatment="O produto não é ofertado; a promoção não é anunciada (BR-01).",
+                severity="warning",
+                title="Active promotion on an unavailable product",
+                detail="Active promotions for products that cannot be sold.",
+                treatment="The product is not offered; the promotion is not announced (BR-01).",
                 ids=_ids(unsellable, "promotion_id"),
             )
         )
@@ -519,7 +526,7 @@ def _order_rows(orders: Iterable[dict], *extra: Callable[[dict], str]) -> tuple:
     )
 
 
-_ORDER_HEADER = ("pedido", "data", "status", "pagamento", "total")
+_ORDER_HEADER = ("order", "date", "status", "payment", "total")
 
 
 def check_order_totals(ctx: CheckContext) -> list[Finding]:
@@ -531,15 +538,16 @@ def check_order_totals(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="order.total_mismatch",
                 section="orders",
-                severity="conflito",
-                title="Total do pedido diferente da soma dos itens",
+                severity="conflict",
+                title="Order total differs from the sum of its items",
                 detail=(
-                    "A soma usa o preço **atual** do catálogo (não há preço histórico por item), "
-                    "então é um indício, não uma prova."
+                    "The sum uses the **current** catalog price (there is no historical price "
+                    "per item), so it is a hint, not proof."
                 ),
-                treatment="Vale o `total_brl` registrado: é o que o cliente pagou (BR-16).",
+                treatment="The recorded `total_brl` prevails: it is what the customer paid "
+                "(BR-16).",
                 ids=_ids(mismatched, "order_id"),
-                table_header=(*_ORDER_HEADER, "soma dos itens"),
+                table_header=(*_ORDER_HEADER, "sum of items"),
                 table_rows=_order_rows(mismatched, lambda o: brl(o["items_total_brl"])),
             )
         )
@@ -550,18 +558,18 @@ def check_order_totals(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="order.pix_without_discount",
                 section="orders",
-                severity="regra",
-                title="Pagamento PIX sem o desconto de 5%",
+                severity="rule",
+                title="PIX payment without the 5% discount",
                 detail=(
-                    "O total é igual ao preço de tabela dos itens, sem os 5% do PIX (manual §3), "
-                    "e nenhum item tem promoção ativa que justifique não aplicar o desconto."
+                    "The total equals the items' list price, without the 5% PIX discount "
+                    "(manual §3), and no item has an active promotion that would justify it."
                 ),
                 treatment=(
-                    "Histórico não é recalculado. Para compras novas, o agente aplica o PIX "
-                    "corretamente (BR-04)."
+                    "History is not recalculated. For new purchases, the agent applies the PIX "
+                    "discount correctly (BR-04)."
                 ),
                 ids=_ids(pix, "order_id"),
-                table_header=(*_ORDER_HEADER, "com PIX seria"),
+                table_header=(*_ORDER_HEADER, "with PIX it would be"),
                 table_rows=_order_rows(
                     pix,
                     lambda o: brl(apply_discount(o["items_total_brl"], PIX_DISCOUNT_PERCENT)),
@@ -575,18 +583,18 @@ def check_order_totals(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="order.installment_below_minimum",
                 section="orders",
-                severity="regra",
-                title="Parcela abaixo do mínimo do manual §3.1",
-                detail="Faixas: até 3x, R$ 50,00; 4–6x, R$ 80,00; 7–12x, R$ 100,00.",
+                severity="rule",
+                title="Installment below the minimum of manual §3.1",
+                detail="Tiers: up to 3x, R$ 50,00; 4–6x, R$ 80,00; 7–12x, R$ 100,00.",
                 treatment=(
-                    "Histórico não é recalculado. Para compras novas, a tool só oferece o "
-                    "parcelamento permitido (BR-05)."
+                    "History is not recalculated. For new purchases, the tool only offers the "
+                    "allowed installments (BR-05)."
                 ),
                 ids=_ids(below, "order_id"),
-                table_header=(*_ORDER_HEADER, "parcela"),
+                table_header=(*_ORDER_HEADER, "installment"),
                 table_rows=_order_rows(
                     below,
-                    lambda o: f"{o['installments']}x de {brl(o['total_brl'] / o['installments'])}",
+                    lambda o: f"{o['installments']}x of {brl(o['total_brl'] / o['installments'])}",
                 ),
             )
         )
@@ -599,38 +607,38 @@ def check_order_integrity(ctx: CheckContext) -> list[Finding]:
     with_items = {i["order_id"] for i in ctx.tables["order_items"]}
     problems: list[tuple[str, str]] = []
     for oid in sorted(with_items - order_ids):
-        problems.append((str(oid), "itens de um pedido inexistente"))
+        problems.append((str(oid), "items of an order that does not exist"))
     for order in sorted(orders, key=lambda o: o["order_id"]):
         oid = str(order["order_id"])
         if order["order_id"] not in with_items:
-            problems.append((oid, "pedido sem itens"))
+            problems.append((oid, "order without items"))
         tracking = order["tracking_code"]
         if order["status"] in SHIPPED_STATUSES:
             if not tracking:
-                problems.append((oid, "enviado/entregue sem código de rastreio"))
+                problems.append((oid, "shipped/delivered without a tracking code"))
             elif not TRACKING_PATTERN.match(tracking):
-                problems.append((oid, f"rastreio {tracking} fora do formato do manual §5.3"))
+                problems.append((oid, f"tracking code {tracking} outside the manual §5.3 format"))
             if order["estimated_delivery"] is None:
-                problems.append((oid, "enviado/entregue sem previsão de entrega"))
+                problems.append((oid, "shipped/delivered without an estimated delivery"))
         elif tracking:
-            problems.append((oid, f"status {order['status']} com código de rastreio"))
+            problems.append((oid, f"status {order['status']} with a tracking code"))
         delivery = order["estimated_delivery"]
         if delivery is not None and delivery < order["order_date"]:
-            problems.append((oid, "previsão de entrega anterior à data do pedido"))
+            problems.append((oid, "estimated delivery before the order date"))
         if order["status"] == "cancelled" and not order["notes"]:
-            problems.append((oid, "cancelado sem motivo em `notes`"))
+            problems.append((oid, "cancelled without a reason in `notes`"))
     if not problems:
         return []
     return [
         Finding(
             code="order.integrity",
             section="orders",
-            severity="conflito",
-            title="Inconsistências estruturais em pedidos",
-            detail="Pedidos cujos campos não batem entre si.",
-            treatment="Registro mantido; o agente mostra só os campos presentes.",
+            severity="conflict",
+            title="Structural inconsistencies in orders",
+            detail="Orders whose fields do not agree with each other.",
+            treatment="Record kept; the agent shows only the fields that are present.",
             ids=tuple(sorted({int(p[0]) for p in problems})),
-            table_header=("pedido", "problema"),
+            table_header=("order", "problem"),
             table_rows=tuple(problems),
         )
     ]
@@ -646,12 +654,12 @@ def check_order_timeliness(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="order.late",
                 section="orders",
-                severity="atenção",
-                title=f"Pedidos atrasados em {date_br(today)}",
-                detail="Status `shipped`/`confirmed` com previsão de entrega já vencida.",
-                treatment="A tool marca `is_late` e recomenda passagem para humano (BR-09).",
+                severity="warning",
+                title=f"Late orders on {date_br(today)}",
+                detail="Status `shipped`/`confirmed` with the estimated delivery already past.",
+                treatment="The tool flags `is_late` and recommends a human hand-off (BR-09).",
                 ids=_ids(late, "order_id"),
-                table_header=(*_ORDER_HEADER, "previsão"),
+                table_header=(*_ORDER_HEADER, "estimated delivery"),
                 table_rows=_order_rows(late, lambda o: date_br(o["estimated_delivery"])),
             )
         )
@@ -661,12 +669,12 @@ def check_order_timeliness(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="order.stale",
                 section="orders",
-                severity="atenção",
-                title=f"Pedidos parados em {date_br(today)}",
-                detail="Status `pending`/`confirmed` há mais de 7 dias sem envio.",
-                treatment="A tool marca `is_stale` e recomenda passagem para humano (BR-09).",
+                severity="warning",
+                title=f"Stalled orders on {date_br(today)}",
+                detail="Status `pending`/`confirmed` for more than 7 days without shipping.",
+                treatment="The tool flags `is_stale` and recommends a human hand-off (BR-09).",
                 ids=_ids(stale, "order_id"),
-                table_header=(*_ORDER_HEADER, "dias parado"),
+                table_header=(*_ORDER_HEADER, "days stalled"),
                 table_rows=_order_rows(stale, lambda o: str((today - o["order_date"]).days)),
             )
         )
@@ -678,7 +686,7 @@ def check_customers(ctx: CheckContext) -> list[Finding]:
     findings = []
     for key, label, code in (
         ("email_normalized", "e-mail", "customer.duplicate_email"),
-        ("phone_digits", "telefone", "customer.duplicate_phone"),
+        ("phone_digits", "phone", "customer.duplicate_phone"),
     ):
         groups: dict[str, list[dict]] = defaultdict(list)
         for customer in customers:
@@ -689,15 +697,16 @@ def check_customers(ctx: CheckContext) -> list[Finding]:
                 Finding(
                     code=code,
                     section="customers",
-                    severity="conflito",
-                    title=f"{label.capitalize()} compartilhado por mais de um cliente",
+                    severity="conflict",
+                    title=f"{label.capitalize()} shared by more than one customer",
                     detail="; ".join(
-                        f"`{value}`: clientes {join_ints(c['customer_id'] for c in group)}"
+                        f"`{value}`: customers {join_ints(c['customer_id'] for c in group)}"
                         for value, group in sorted(duplicated.items())
                     ),
                     treatment=(
-                        "O contato sozinho não identifica o cliente: `get_order` exige número do "
-                        "pedido + contato, e `list_my_orders` busca só por telefone (BR-08)."
+                        "The contact alone does not identify the customer: `get_order` requires "
+                        "order number + contact, and `list_my_orders` looks up by phone only "
+                        "(BR-08)."
                     ),
                     ids=tuple(sorted(c["customer_id"] for g in duplicated.values() for c in g)),
                 )
@@ -707,7 +716,7 @@ def check_customers(ctx: CheckContext) -> list[Finding]:
         (str(c["customer_id"]), problem)
         for c in customers
         for problem in (
-            None if PHONE_DIGITS_PATTERN.match(c["phone_digits"]) else f"telefone {c['phone']}",
+            None if PHONE_DIGITS_PATTERN.match(c["phone_digits"]) else f"phone {c['phone']}",
             None if EMAIL_PATTERN.match(c["email_normalized"]) else f"e-mail {c['email']}",
         )
         if problem
@@ -717,12 +726,12 @@ def check_customers(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="customer.invalid_contact",
                 section="customers",
-                severity="conflito",
-                title="Contatos em formato inválido",
-                detail="Telefone ou e-mail fora do formato esperado.",
-                treatment="Registro mantido; esse contato não serve para verificação (BR-08).",
+                severity="conflict",
+                title="Contacts in an invalid format",
+                detail="Phone or e-mail outside the expected format.",
+                treatment="Record kept; that contact cannot be used for verification (BR-08).",
                 ids=tuple(sorted({int(i[0]) for i in invalid})),
-                table_header=("cliente", "problema"),
+                table_header=("customer", "problem"),
                 table_rows=tuple(invalid),
             )
         )
@@ -747,14 +756,14 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.multiple_whatsapp",
                 section="manual",
-                severity="conflito",
-                title="Dois números apresentados como WhatsApp",
+                severity="conflict",
+                title="Two numbers presented as WhatsApp",
                 detail=(
-                    f'Números no manual: {", ".join(phones)}. A §1.2 traz "Telefone / WhatsApp" '
-                    "e a §7 traz outro número como o canal de WhatsApp."
+                    f'Numbers in the manual: {", ".join(phones)}. §1.2 lists "Telefone / '
+                    'WhatsApp" and §7 gives another number as the WhatsApp channel.'
                 ),
                 treatment=(
-                    "WhatsApp = (67) 3321-4500 (seção específica do canal); telefone = "
+                    "WhatsApp = (67) 3321-4500 (the channel's own section); phone = "
                     "(67) 3341-4444 (BR-12, DD-§6)."
                 ),
             )
@@ -767,12 +776,12 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.email_with_accent",
                 section="manual",
-                severity="conflito",
-                title="E-mail com acento no domínio",
-                detail=f"E-mails no manual: {', '.join(f'`{e}`' for e in emails)}.",
+                severity="conflict",
+                title="E-mail with an accent in the domain",
+                detail=f"E-mails in the manual: {', '.join(f'`{e}`' for e in emails)}.",
                 treatment=(
-                    "Usado `contato@emporiodamusica.com.br` (capa); o acento é tratado como erro "
-                    "de digitação (BR-12, DD-§6)."
+                    "Uses `contato@emporiodamusica.com.br` (cover page); the accent is treated as "
+                    "a typo (BR-12, DD-§6)."
                 ),
             )
         )
@@ -787,14 +796,14 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.installment_conflict",
                 section="manual",
-                severity="conflito",
-                title="Parcela mínima contraditória entre §3 e §3.1",
+                severity="conflict",
+                title="Contradictory minimum installment between §3 and §3.1",
                 detail=(
-                    'A tabela da §3 diz "parcela mínima de R$ 100,00" para todo o crédito; a '
-                    f"§3.1 define faixas. Mínimos citados: {cited}."
+                    'The §3 table says "parcela mínima de R$ 100,00" (minimum installment) for '
+                    f"all credit purchases; §3.1 defines tiers. Minimums cited: {cited}."
                 ),
                 treatment=(
-                    "Vale a §3.1 (mais específica): 1–3x R$ 50,00 · 4–6x R$ 80,00 · "
+                    "§3.1 prevails (more specific): 1–3x R$ 50,00 · 4–6x R$ 80,00 · "
                     "7–12x R$ 100,00 (BR-05, DD-§6)."
                 ),
             )
@@ -807,13 +816,13 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.catalog_size",
                 section="manual",
-                severity="conflito",
-                title="Tamanho do catálogo",
+                severity="conflict",
+                title="Catalog size",
                 detail=(
-                    f"O manual (§1) fala em mais de {claimed.group(1)} instrumentos; o sistema "
-                    f"tem {actual} produtos."
+                    f'The manual (§1) says "mais de {claimed.group(1)} instrumentos" (more than '
+                    f"{claimed.group(1)} instruments); the system has {actual} products."
                 ),
-                treatment="Vale o sistema; o agente nunca afirma ter o que não está na base.",
+                treatment="The system prevails; the agent never claims to have what is not in it.",
             )
         )
 
@@ -822,10 +831,13 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.shipping_threshold_gap",
                 section="manual",
-                severity="atenção",
-                title="Frete de exatamente R$ 500,00 não está coberto",
-                detail='§5.1: grátis "acima de R$ 500,00" e R$ 35,00 "abaixo de R$ 500,00".',
-                treatment="Até R$ 500,00 inclusive paga R$ 35,00; grátis só acima (BR-07).",
+                severity="warning",
+                title="Shipping for exactly R$ 500,00 is not covered",
+                detail=(
+                    '§5.1: free "acima de R$ 500,00" (above) and R$ 35,00 "abaixo de R$ 500,00" '
+                    "(below)."
+                ),
+                treatment="Up to R$ 500,00 inclusive pays R$ 35,00; free only above (BR-07).",
             )
         )
 
@@ -835,14 +847,17 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
             Finding(
                 code="manual.black_friday",
                 section="manual",
-                severity="atenção",
-                title="Black Friday prevista em novembro × promoções do sistema",
+                severity="warning",
+                title="Black Friday announced for November × promotions in the system",
                 detail=(
-                    'O manual (§6.1) promete Black Friday em novembro com 15% a 30% "em todo o '
-                    f'catálogo"; o sistema tem só {active} promoções ativas, e todas as de '
-                    "Black Friday estão inativas."
+                    "The manual (§6.1) promises a November Black Friday with 15% to 30% off "
+                    f'"em todo o catálogo" (the whole catalog); the system has only {active} '
+                    "active promotions, and every Black Friday one is inactive."
                 ),
-                treatment="Vale o sistema: só promoção com `is_active = 1` (manual §7.3, DD-§6).",
+                treatment=(
+                    "The system prevails: only promotions with `is_active = 1` "
+                    "(manual §7.3, DD-§6)."
+                ),
             )
         )
     return findings
@@ -851,24 +866,24 @@ def check_manual(ctx: CheckContext) -> list[Finding]:
 CHECKS: tuple[tuple[str, str, Check], ...] = (
     (
         "products",
-        "Descrição × nome/specs (marca, cordas, teclas, madeira)",
+        "Description × name/specs (brand, strings, keys, wood)",
         check_description_conflicts,
     ),
-    ("products", "Nome × specs (nylon/aço, elétrico, cor)", check_name_specs),
-    ("products", "Status e estoque", check_product_status),
-    ("products", "Esquemas de specs", check_specs_schemas),
-    ("products", "Origem dos registros", check_specs_serialization),
-    ("categories", "Categorias com produtos", check_empty_categories),
-    ("promotions", "Promoções", check_promotions),
-    ("orders", "Totais, PIX e parcelamento", check_order_totals),
+    ("products", "Name × specs (nylon/steel, electric, color)", check_name_specs),
+    ("products", "Status and stock", check_product_status),
+    ("products", "Specs schemas", check_specs_schemas),
+    ("products", "Record origin", check_specs_serialization),
+    ("categories", "Categories with products", check_empty_categories),
+    ("promotions", "Promotions", check_promotions),
+    ("orders", "Totals, PIX and installments", check_order_totals),
     (
         "orders",
-        "Integridade (itens, rastreio no formato do manual §5.3, datas, motivo de cancelamento)",
+        "Integrity (items, manual §5.3 tracking format, dates, cancellation reason)",
         check_order_integrity,
     ),
-    ("orders", "Atraso e pedidos parados", check_order_timeliness),
-    ("customers", "Contatos duplicados e formato de telefone/e-mail", check_customers),
-    ("manual", "Contradições internas do manual", check_manual),
+    ("orders", "Late and stalled orders", check_order_timeliness),
+    ("customers", "Duplicate contacts and phone/e-mail format", check_customers),
+    ("manual", "Internal contradictions in the manual", check_manual),
 )
 
 

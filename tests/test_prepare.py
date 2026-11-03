@@ -40,8 +40,8 @@ class TestProducts:
 
     def test_conflict_reasons_cover_counts(self, result):
         products = by_id(result, "products", "product_id")
-        assert any("5 cordas" in r for r in products[137]["description_conflict_reasons"])
-        assert any("88 teclas" in r for r in products[142]["description_conflict_reasons"])
+        assert any("5 strings" in r for r in products[137]["description_conflict_reasons"])
+        assert any("88 keys" in r for r in products[142]["description_conflict_reasons"])
 
     def test_consistent_descriptions_are_not_flagged(self, result):
         products = by_id(result, "products", "product_id")
@@ -95,7 +95,7 @@ class TestProducts:
 def test_empty_categories(result):
     finding = result.finding("category.empty")
     assert set(finding.ids) == {6, 7, 8}
-    assert "cordas orquestrais" in finding.detail
+    assert "orchestral strings" in finding.detail
 
 
 class TestOrders:
@@ -145,7 +145,7 @@ class TestPromotions:
     def test_multiple_per_product(self, result):
         finding = result.finding("promotion.multiple_per_product")
         assert set(finding.ids) == {93, 96, 99}
-        assert "Todas inativas" in finding.detail
+        assert "All inactive" in finding.detail
 
 
 def test_manual_findings(result):

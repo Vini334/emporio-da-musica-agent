@@ -394,7 +394,7 @@ REPORT_AS_OF = date(2026, 11, 2)
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m emporio.data.prepare",
-        description="Gera data/processed e docs/data_quality_report.md a partir de data/raw.",
+        description="Builds data/processed and docs/data_quality_report.md from data/raw.",
     )
     parser.add_argument("--raw-dir", type=Path, default=config.RAW_DIR)
     parser.add_argument("--out-dir", type=Path, default=config.PROCESSED_DIR)
@@ -404,8 +404,8 @@ def main(argv: list[str] | None = None) -> int:
         type=date.fromisoformat,
         default=REPORT_AS_OF,
         help=(
-            "data de referência para atrasos e pedidos parados no relatório (AAAA-MM-DD); "
-            f"padrão: {REPORT_AS_OF.isoformat()}, a data da análise entregue"
+            "reference date for late and stalled orders in the report (YYYY-MM-DD); "
+            f"default: {REPORT_AS_OF.isoformat()}, the date of the delivered analysis"
         ),
     )
     args = parser.parse_args(argv)
@@ -413,8 +413,8 @@ def main(argv: list[str] | None = None) -> int:
     result = prepare(args.raw_dir, as_of=args.as_of)
     written = write_processed(result, args.out_dir)
     report = write_report(result, args.report)
-    print(f"{len(written)} arquivos em {args.out_dir}")
-    print(f"{len(result.findings)} achados em {report} (referência {date_br(result.as_of)})")
+    print(f"{len(written)} files in {args.out_dir}")
+    print(f"{len(result.findings)} findings in {report} (reference {date_br(result.as_of)})")
     return 0
 
 
