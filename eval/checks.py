@@ -66,7 +66,7 @@ def check_turn(expect: Expect, reply: Reply) -> list[str]:
         if name not in called:
             failures.append(f"expected tool not called: {name}")
     if expect.tools_any and not set(expect.tools_any) & set(called):
-        failures.append(f"nenhuma destas tools foi chamada: {', '.join(expect.tools_any)}")
+        failures.append(f"none of these tools was called: {', '.join(expect.tools_any)}")
     for name in expect.tools_not_called:
         if name in called:
             failures.append(f"tool proibida chamada: {name}")
