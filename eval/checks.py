@@ -64,14 +64,14 @@ def check_turn(expect: Expect, reply: Reply) -> list[str]:
 
     for name in expect.tools_called:
         if name not in called:
-            failures.append(f"tool esperada não chamada: {name}")
+            failures.append(f"expected tool not called: {name}")
     if expect.tools_any and not set(expect.tools_any) & set(called):
         failures.append(f"nenhuma destas tools foi chamada: {', '.join(expect.tools_any)}")
     for name in expect.tools_not_called:
         if name in called:
             failures.append(f"tool proibida chamada: {name}")
     if expect.no_tools and called:
-        failures.append(f"não devia chamar tools, chamou: {', '.join(called)}")
+        failures.append(f"should not call tools, called: {', '.join(called)}")
     for name, wanted in expect.tool_args.items():
         calls = [call for call in reply.tool_calls if call.name == name]
         if not any(_args_match(call.args, wanted) for call in calls):
@@ -79,10 +79,10 @@ def check_turn(expect: Expect, reply: Reply) -> list[str]:
 
     for needle in expect.must_contain:
         if text_key(needle) not in text:
-            failures.append(f"faltou no texto: {needle!r}")
+            failures.append(f"missing from the reply: {needle!r}")
     for group in expect.must_contain_any:
         if not any(text_key(needle) in text for needle in group):
-            failures.append(f"faltou no texto um destes: {group}")
+            failures.append(f"missing from the reply, one of: {group}")
     for needle in expect.must_not_contain:
         if text_key(needle) in text:
             failures.append(f"texto proibido presente: {needle!r}")

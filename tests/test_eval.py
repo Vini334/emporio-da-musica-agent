@@ -87,11 +87,11 @@ def test_run_case_with_scripted_model(tmp_path, monkeypatch):
     )
     result = run_case(case, build_agent(model, InMemorySaver()))
 
-    assert result.status == "passou"
+    assert result.status == "passed"
     assert result.tools_used == ["get_order"]
     report = render_report([result], "fake:model", datetime(2026, 11, 3, 10))
-    assert "Taxa de aprovação: 100%" in report
-    assert "| `lgpd` | Pedido e LGPD | ✅ passou | `get_order` |" in report
+    assert "Pass rate: 100%" in report
+    assert "| `lgpd` | Orders and LGPD | ✅ passed | `get_order` |" in report
 
 
 def test_model_error_is_reported_as_error_not_failure(tmp_path, monkeypatch):
@@ -103,5 +103,5 @@ def test_model_error_is_reported_as_error_not_failure(tmp_path, monkeypatch):
     )
     [case] = load_cases(path)
     result = run_case(case, build_agent(scripted(AIMessage(MODEL_ERROR_REPLY)), InMemorySaver()))
-    assert result.status == "erro"
+    assert result.status == "error"
     assert result.turns[0].failures == []

@@ -28,60 +28,62 @@ if TYPE_CHECKING:
 
 JUDGE_TEMPERATURE = 0.0
 CRITERIA = {
-    "tom": "Tom",
-    "cordialidade": "Cordialidade",
-    "concisao": "Concisão",
-    "encaminhamento": "Encaminhamento",
+    "tone": "Tone",
+    "courtesy": "Courtesy",
+    "concision": "Concision",
+    "next_step": "Next step",
 }
 
 
 class ToneVerdict(BaseModel):
     """Structured output the judge model must return."""
 
-    tom: int = Field(
+    tone: int = Field(
         ge=1,
         le=5,
-        description="Informal mas profissional, como um amigo que entende de música; trata por "
-        "'você'; emoji pontual, não em toda frase; soa como a Dó, assistente virtual da loja.",
+        description="Informal but professional, like a friend who knows music; addresses the "
+        "customer as 'você'; occasional emoji, not in every sentence; sounds like Dó, the "
+        "store's virtual assistant.",
     )
-    cordialidade: int = Field(
+    courtesy: int = Field(
         ge=1,
         le=5,
-        description="Acolhe o cliente; mostra empatia em problemas (atraso, defeito, prazo "
-        "vencido); recusa pedidos fora do escopo ou indevidos com simpatia, sem sermão.",
+        description="Welcomes the customer; shows empathy on problems (delay, defect, missed "
+        "deadline); declines out-of-scope or improper requests kindly, without lecturing.",
     )
-    concisao: int = Field(
+    concision: int = Field(
         ge=1,
         le=5,
-        description="Estilo WhatsApp: mensagens curtas, listas de até uns 6 itens, sem textão, "
-        "sem jargão interno (nomes de tools, campos JSON, trechos longos do manual).",
+        description="WhatsApp style: short messages, lists of up to about 6 items, no walls of "
+        "text, no internal jargon (tool names, JSON fields, long manual excerpts).",
     )
-    encaminhamento: int = Field(
+    next_step: int = Field(
         ge=1,
         le=5,
-        description="Fecha com um próximo passo claro ou uma pergunta útil; quando falta algo, "
-        "pede uma coisa por vez; não deixa o cliente sem saber o que fazer.",
+        description="Ends with a clear next step or a useful question; when something is "
+        "missing, asks for one thing at a time; never leaves the customer unsure what to do.",
     )
-    comentario: str = Field(
-        description="Uma ou duas frases em português justificando as notas mais baixas."
+    comment: str = Field(
+        description="One or two sentences in English justifying the lowest scores."
     )
 
 
 JUDGE_PROMPT = """\
-Você avalia o atendimento da Dó, assistente virtual da Empório da Música (loja de instrumentos \
-musicais em Campo Grande/MS), que conversa com clientes por mensagem, no estilo WhatsApp.
+You evaluate the customer service of Dó, the virtual assistant of Empório da Música (a musical \
+instrument store in Campo Grande/MS, Brazil), who talks to customers by message, WhatsApp style. \
+The conversation is in Brazilian Portuguese, as it should be.
 
-Avalie **só a forma** das respostas da Dó: tom, cordialidade, concisão e encaminhamento. **Não** \
-avalie se preços, prazos, estoque ou políticas estão corretos: isso já é checado por outro \
-processo. Também não penalize a Dó por recusar descontos, dados de terceiros ou assuntos fora da \
-loja: recusar faz parte das regras; avalie apenas se a recusa foi simpática.
+Score **only the form** of Dó's replies: tone, courtesy, concision and next step. Do **not** \
+judge whether prices, deadlines, stock or policies are correct: another process checks that. \
+Do not penalize Dó for declining discounts, third-party data or topics outside the store either: \
+declining is part of the rules; judge only whether the refusal was kind.
 
-Escala de cada critério:
-5 = exemplar · 4 = bom, com um detalhe a melhorar · 3 = aceitável, com falhas visíveis · \
-2 = ruim · 1 = inadequado para um cliente.
+Scale for each criterion:
+5 = exemplary · 4 = good, with one detail to improve · 3 = acceptable, with visible flaws · \
+2 = poor · 1 = unacceptable for a customer.
 
-Considere a conversa inteira; se houver mais de uma resposta, a nota reflete o conjunto. Seja \
-exigente: um 5 deve ser realmente difícil de melhorar."""
+Consider the whole conversation; with more than one reply, the score reflects all of them. Be \
+demanding: a 5 should be genuinely hard to improve on. Write the comment in English."""
 
 
 @dataclass
@@ -114,10 +116,10 @@ def render_conversation(result: CaseResult) -> str:
     (so it knows the reply was grounded, without the raw JSON)."""
     parts = []
     for index, turn in enumerate(result.turns, start=1):
-        parts.append(f"### Turno {index}\n**Cliente:** {turn.user}")
+        parts.append(f"### Turn {index}\n**Customer:** {turn.user}")
         if turn.tools:
             names = ", ".join(tool["name"] for tool in turn.tools)
-            parts.append(f"_(consultas feitas pela Dó: {names})_")
+            parts.append(f"_(lookups made by Dó: {names})_")
         parts.append(f"**Dó:** {turn.reply}")
     return "\n\n".join(parts)
 
@@ -125,11 +127,11 @@ def render_conversation(result: CaseResult) -> str:
 def judge_case(judge: Runnable, result: CaseResult) -> ToneScore:
     """Score one case. Cases with an infrastructure error are not judged; judge failures are
     recorded on the score and never raised."""
-    if result.status == "erro" or not result.turns:
-        return ToneScore(error="caso não avaliado (erro de infraestrutura)")
+    if result.status == "error" or not result.turns:
+        return ToneScore(error="case not judged (infrastructure error)")
     messages = [
         SystemMessage(JUDGE_PROMPT),
-        HumanMessage(f"Conversa a avaliar:\n\n{render_conversation(result)}"),
+        HumanMessage(f"Conversation to evaluate:\n\n{render_conversation(result)}"),
     ]
     try:
         verdict: Any = judge.invoke(messages)
@@ -139,5 +141,5 @@ def judge_case(judge: Runnable, result: CaseResult) -> ToneScore:
         verdict = ToneVerdict.model_validate(verdict)
     return ToneScore(
         scores={key: getattr(verdict, key) for key in CRITERIA},
-        comment=verdict.comentario.strip(),
+        comment=verdict.comment.strip(),
     )
