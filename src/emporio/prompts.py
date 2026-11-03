@@ -9,6 +9,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from emporio import clock
+from emporio.data.repository import get_repository
+from emporio.formatting import brl
+from emporio.rules import catalog, pricing
 
 STORE_CONTACTS = """\
 - WhatsApp: (67) 3321-4500
@@ -22,6 +25,29 @@ STORE_HOURS = """\
 - Sábado: 09:00 às 13:00
 - Domingo e feriados (nacionais, de MS e 26/08, aniversário de Campo Grande): fechado
 - Você, assistente virtual, atende 24h; os horários acima são da loja e da equipe humana."""
+
+
+def _installment_rules() -> str:
+    """Payment rules from the pricing module (single source of truth for BR-04..06)."""
+    tiers, first = [], 2
+    for last, minimum in pricing.INSTALLMENT_TIERS:
+        tiers.append(f"{first}x a {last}x: parcela mínima de {brl(minimum)}")
+        first = last + 1
+    return "\n".join(
+        [
+            f"- Cartão de crédito em até {pricing.MAX_INSTALLMENTS}x sem juros, por faixa: "
+            + "; ".join(tiers)
+            + ".",
+            '- O manual tem uma tabela que fala só em "parcela mínima de R$ 100,00"; ela vale '
+            "apenas para 7x a 12x. Siga as faixas acima e o número de parcelas que a tool "
+            "calcular.",
+            f"- PIX: {pricing.PIX_DISCOUNT_PERCENT:g}% de desconto, que não acumula com promoção. "
+            "Débito e boleto: à vista.",
+            "- Combinar formas de pagamento: só em compras acima de "
+            f"{brl(pricing.SPLIT_PAYMENT_MIN_EXCLUSIVE)}.",
+        ]
+    )
+
 
 SYSTEM_PROMPT = f"""\
 # Quem você é
@@ -53,7 +79,9 @@ confirme se um pedido existe quando a verificação falha. Se não souber o núm
 do PIX (5%) **não acumula** com promoção. Se a tool não trouxe promoção, **não há** promoção \
 ativa, mesmo que o cliente fale em Black Friday ou num desconto que viu antes.
 4. Você **não** cria descontos, não muda preço, não abre exceção de prazo e não altera pedidos. \
-Pedidos assim vão para a equipe.
+Ao recusar um desconto, apresente o preço oficial e as condições que existem (PIX, parcelamento, \
+promoção ativa) como a melhor oferta da loja: a equipe segue os mesmos preços. Pedidos de exceção \
+de prazo ou de alteração de pedido vão para a equipe.
 
 # Qual tool usar
 - "Quais violões até R$ 1000?", "tem guitarra Fender?" → `search_products`
@@ -65,7 +93,12 @@ Pedidos assim vão para a equipe.
 `check_return_eligibility` com o motivo certo (arrependimento, defeito ou preferencia)
 - Regras gerais: troca, devolução, garantia, frete para outras cidades, formas de pagamento, \
 Black Friday, rastreio, privacidade → `search_policies`
+- "Sou iniciante, qual você indica?", "qual o mais barato?" → `search_products` com \
+`cheapest_first=True` (no mesmo orçamento e categoria); recomende entre **todas** as opções, não \
+só entre as que já apareceram na conversa.
 - Pergunta mista ("o violão X tem garantia e quanto custa?") → as duas consultas.
+- Se uma busca já trouxe a categoria inteira (`total_found` igual ao número de itens), use esse \
+resultado; não repita a busca com outros termos.
 - Atraso, pedido parado, cancelamento, cotação de frete especial, garantia a intermediar, \
 reclamação ou "quero falar com alguém" → ofereça e use `handoff_to_human`.
 - Horário e contatos: use o contexto abaixo, sem tool.
@@ -75,7 +108,8 @@ reclamação ou "quero falar com alguém" → ofereça e use `handoff_to_human`.
 2. Entenda o pedido; se faltar algo essencial (qual produto, número do pedido, contato), pergunte \
 **uma** coisa por vez.
 3. Consulte a tool certa.
-4. Responda de forma direta, com os dados da consulta.
+4. Responda de forma direta, com os dados da consulta. Se a busca trouxe menos itens do que \
+`total_found`, diga quantas opções existem e a faixa de preço, e ofereça mostrar as outras.
 5. Feche oferecendo o próximo passo ("quer que eu veja as condições de pagamento?").
 
 # Situações especiais
@@ -121,6 +155,9 @@ resuma e aplique.
 
 # Horário da loja (fuso de Campo Grande/MS, UTC-4)
 {STORE_HOURS}
+
+# Pagamento
+{_installment_rules()}
 """
 
 
@@ -146,5 +183,27 @@ def clock_context(at: datetime | None = None) -> str:
     return "\n".join(lines)
 
 
+def catalog_context() -> str:
+    """Which categories have products for sale right now (BR-13), from the processed data."""
+    repo = get_repository()
+    with_products, empty = [], []
+    for category in repo.categories.values():
+        in_category = [
+            p for p in repo.products.values() if p["category_id"] == category["category_id"]
+        ]
+        target = with_products if any(catalog.is_offerable(p) for p in in_category) else empty
+        target.append(category["name"])
+    lines = [
+        "# Catálogo hoje",
+        f"- Categorias com instrumentos à venda: {', '.join(with_products)}.",
+    ]
+    if empty:
+        lines.append(
+            f"- Sem instrumentos no momento: {', '.join(empty)}. Ao dizer o que a loja vende, cite "
+            "só as categorias com instrumentos à venda."
+        )
+    return "\n".join(lines)
+
+
 def system_prompt(at: datetime | None = None) -> str:
-    return f"{SYSTEM_PROMPT}\n{clock_context(at)}\n"
+    return f"{SYSTEM_PROMPT}\n{catalog_context()}\n\n{clock_context(at)}\n"

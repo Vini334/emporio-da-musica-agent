@@ -46,3 +46,16 @@ def test_clock_block_saturday_afternoon_is_closed_until_monday():
 def test_clock_block_names_the_holiday():
     block = prompts.clock_context(at("2026-11-02T10:00"))  # Finados
     assert "feriado" in block and "FECHADA" in block
+
+
+def test_prompt_states_installment_tiers_not_the_flat_minimum():
+    text = prompts.system_prompt(at("2026-11-03T10:00"))
+    assert "4x a 6x: parcela mínima de R$ 80,00" in text
+    assert "vale apenas para 7x a 12x" in text
+
+
+def test_catalog_block_lists_only_categories_with_products_for_sale():
+    block = prompts.catalog_context()
+    selling, empty = block.split("\n")[1], block.split("\n")[2]
+    assert "Violões" in selling and "Ukuleles" in selling
+    assert "Cordas Orquestrais" in empty and "Sopro" in empty and "Sopro" not in selling
