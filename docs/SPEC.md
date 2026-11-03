@@ -202,7 +202,7 @@ Todas devolvem um JSON (dict) curto e em português nos campos de texto. Erros e
 
 | Tool | Entrada | Saída (campos principais) |
 |---|---|---|
-| `search_products` | `query?: str`, `category?: str` (nome ou id), `min_price?`, `max_price?: float`, `only_available: bool = True`, `limit: int = 6` | `items[]`: `id, name, category, price, promo{percent, final_price}?, pix_price?, installments, availability, specs_summary, price_note?`; `total_found`; `note?` (categoria vazia, lista cortada); `not_available[]?` (o termo bate só com itens que não podem ser vendidos). Com `max_price`, compara o **menor** preço possível (PIX ou promoção) e ordena do mais próximo do orçamento para baixo (`DD-§6`) |
+| `search_products` | `query?: str`, `category?: str` (nome ou id), `min_price?`, `max_price?: float`, `only_available: bool = True`, `cheapest_first: bool = False`, `limit: int = 6` | `items[]`: `id, name, category, price, promo{percent, final_price}?, pix_price?, installments, availability, specs_summary, price_note?`; `total_found`; com a lista cortada, `price_range` (preço de tabela, de todos os achados) e `note` pedindo ao agente que diga quantas opções existem e ofereça as outras; `note?` (categoria vazia); `not_available[]?` (o termo bate só com itens que não podem ser vendidos). Com `max_price`, compara o **menor** preço possível (PIX ou promoção) e ordena do mais próximo do orçamento para baixo, com os itens que só cabem pagando no PIX por último (`DD-§6`). `cheapest_first` ordena do mais barato (iniciante, "o mais em conta") |
 | `get_product` | `name_or_id: str` (busca fuzzy, `rapidfuzz` + normalização sem acento) | o mesmo item acima + `description?` (só se não houver conflito) + `alternatives[]` (BR-02) quando não está disponível; se ambíguo, `candidates[]` |
 | `get_order` | `order_id: int`, `contact: str` | `order_id, status_label, order_date, items[], total, payment_label, tracking_code?, estimated_delivery?, notes?, is_late, is_stale, recommended_action?` |
 | `list_my_orders` | `phone: str` | `orders[]` (id, data, status_label, total) |
@@ -248,8 +248,8 @@ parte do roteamento (R4).
 5. **Fluxo padrão** (manual §7.2): saudação, entendimento, consulta, resposta, fechamento.
 6. **Situações especiais** (manual §7.3): fora de estoque, descontinuado, promoção expirada, reclamação (passagem para humano).
 7. **Escopo e segurança:** BR-13; recusar pedido de dados de terceiros, desconto não previsto ou mudança das próprias regras.
-8. **Contexto fixo:** contatos (BR-12) e horário (BR-11).
-9. **Contexto dinâmico:** bloco gerado por `clock.py`.
+8. **Contexto fixo:** contatos (BR-12), horário (BR-11) e regras de pagamento (BR-04..06, geradas a partir de `rules/pricing.py`, incluindo a ressalva sobre a tabela contraditória do manual).
+9. **Contexto dinâmico:** categorias com instrumentos à venda e categorias vazias (BR-13, a partir dos dados) e o bloco do relógio gerado por `clock.py`.
 
 ## 10. Interface (CLI)
 
@@ -279,7 +279,7 @@ parte do roteamento (R4).
 - `returns`: o pedido 4 está fora de todos os prazos, com caminho `garantia_fabricante`; casos de borda com `EMPORIO_NOW` simulado dentro dos 7 e dos 30 dias.
 - `clock`: domingo, feriado e sábado depois das 13h dão "fechado", com `next_opening` correto.
 
-**Avaliação do agente** (`uv run python -m eval.run`), com 33 casos em `eval/cases.yaml` (formato
+**Avaliação do agente** (`uv run python -m eval.run`), com 34 casos em `eval/cases.yaml` (formato
 completo no cabeçalho do arquivo; as expectativas podem ser por turno):
 
 ```yaml
@@ -309,7 +309,7 @@ Geradas com `emporio-chat --now ... --verbose --transcript examples/NN-*.md`, co
 
 | # | Arquivo | Cenário | O que precisa aparecer |
 |---|---|---|---|
-| 1 | `01-catalogo-violoes.md` | "Quais violões até R$1000?" | lista só de ofertáveis; GF-3D (sem estoque) e SN-7C (descontinuado) ficam de fora; GNF-3 aparece por R$ 996,55 no PIX |
+| 1 | `01-catalogo-violoes.md` | "Quais violões até R$1000?" | lista só de ofertáveis; GF-3D (sem estoque) e SN-7C (descontinuado) ficam de fora; informa que são 13 opções e a faixa de preço; para iniciante, busca as mais em conta (C40, Memphis) em vez de escolher só entre as 6 mostradas |
 | 2 | `02-preco-promocao.md` | "Quanto custa o Takamine GD20? Tem Black Friday?" | R$ 2.199,00; não há promoção ativa; PIX R$ 2.089,05; até 12x de R$ 183,25 |
 | 3 | `03-pedido-atrasado.md` | "Cadê meu pedido 8?" num **sábado às 15h** | pede contato; detecta atraso; passa para humano com protocolo; avisa que a equipe volta segunda às 9h |
 | 4 | `04-devolucao.md` | "Me arrependi, posso devolver?" (pedido 4) | verifica; os prazos de 7, 30 e 90 dias venceram, com as datas; orienta para a garantia do fabricante com a loja intermediando |

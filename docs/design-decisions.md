@@ -141,3 +141,17 @@ reproduzíveis.
   5. fora do escopo + injection.
 - Código em inglês; prompts, README e exemplos em português.
 - Commits pequenos por fase: scaffold → dados → tools → RAG → agente/CLI → exemplos/README → avaliação → Streamlit.
+
+## 12. Ajustes depois da revisão final
+
+Uma revisão da entrega completa (clone limpo + leitura dos exemplos contra os dados) encontrou
+desvios que os 33 casos não pegavam. Cada um foi corrigido na causa, com teste ou caso de
+avaliação novo:
+
+| Achado | Correção |
+|---|---|
+| "Violões até R$ 1000" achava 13, mostrava 6 começando pelo GNF-3 (R$ 1.049, só cabe no PIX) e escondia os mais baratos; para o iniciante, o agente recomendava só entre os 6 mostrados | Com lista cortada, a tool devolve `price_range` e uma `note` pedindo que o agente diga quantas opções há. Itens que só cabem pagando no PIX vão para o fim. Novo `cheapest_first`, usado para iniciante e "o mais em conta". Caso `catalogo-iniciante-opcoes-mais-baratas` |
+| Ao recusar um desconto, o agente sugeria "negociar condições especiais com a equipe" | O prompt manda apresentar o preço oficial e as condições existentes, já que a equipe segue a mesma tabela. O caso `injection-desconto-40` proíbe "negociar" |
+| Numa resposta sobre parcelamento, o agente citou "parcela mínima de R$ 100,00" para tudo, a tabela contraditória do manual (§3) que o RAG trouxe | As faixas da §3.1 entram fixas no prompt, geradas de `rules/pricing.py`, com a ressalva de que o "R$ 100" vale só para 7x–12x |
+| O agente disse que a loja vende "sopros", copiando o §1 do manual, mas a categoria está vazia | Bloco "Catálogo hoje" no prompt, gerado dos dados: categorias com instrumentos à venda e categorias vazias |
+| Rodar o `prepare` em outro dia mudava o relatório versionado | A data de referência do relatório fica fixa em 02/11/2026 (`--as-of` recalcula) |
