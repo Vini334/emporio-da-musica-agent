@@ -1,13 +1,20 @@
-# Conversa com a Dó — Empório da Música
+# Conversation with Dó — Empório da Música
 
-- Momento simulado: terça-feira, 03/11/2026 10:00 (fixado com `--now`)
-- Modelo: `google_genai:gemini-flash-latest`
-- Sessão: `4f4fe60d08de`
-- Gerado com `emporio-chat --verbose --transcript`; as chamadas de tool aparecem antes de cada resposta.
+- Simulated time: Tuesday, 2026-11-03 10:00 (pinned with `--now`)
+- Model: `google_genai:gemini-flash-latest`
+- Session: `4f4fe60d08de`
+- Generated with `emporio-chat --verbose --transcript`; tool calls appear before each reply. The conversation is in Brazilian Portuguese, the store's language.
+
+## Summary (English)
+
+| # | Customer (translated) | What Dó did |
+|---|---|---|
+| 1 | "Hi! Which acoustic guitars do you have up to R$1000?" | Searched the catalog with a budget. Said there are **13 options from R$ 429,90**, listed the 6 closest to the budget with PIX price and installments, and offered to show the cheaper ones. Out-of-stock (GF-3D) and discontinued (SN-7C) items never appear. |
+| 2 | "I'm a beginner, which one do you recommend? Can I pay in installments?" | Searched again **cheapest first** across all 13 options and recommended nylon-string models for beginners (Yamaha C40 R$ 599,90, Tagima Memphis R$ 429,90, Rozini RC-104 R$ 459,90). Explained the installment tiers of manual §3.1 (min. R$ 50 / R$ 80 / R$ 100) with the C40 example: up to 6x of R$ 99,98. |
 
 ---
 
-**👤 Cliente:** Oi! Quais violões vocês têm até R$1000?
+**👤 Customer:** Oi! Quais violões vocês têm até R$1000?
 
 <details><summary>🔧 <code>search_products(category="Violões", max_price=1000)</code></summary>
 
@@ -102,7 +109,7 @@ Temos **13 opções** de violões nessa faixa (com preços a partir de R$ 429,90
 
 Você prefere cordas de **aço** ou de **nylon**? Se quiser, também posso te mostrar as opções mais em conta ou ver as condições de pagamento e frete de algum modelo!
 
-**👤 Cliente:** Sou iniciante, qual desses você indica? E dá pra parcelar?
+**👤 Customer:** Sou iniciante, qual desses você indica? E dá pra parcelar?
 
 <details><summary>🔧 <code>search_products(category="Violões", cheapest_first=true, max_price=1000)</code></summary>
 

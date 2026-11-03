@@ -1,13 +1,23 @@
-# Conversa com a Dó — Empório da Música
+# Conversation with Dó — Empório da Música
 
-- Momento simulado: sábado, 07/11/2026 15:00 (fixado com `--now`)
-- Modelo: `google_genai:gemini-flash-latest`
-- Sessão: `64db12eb9c54`
-- Gerado com `emporio-chat --verbose --transcript`; as chamadas de tool aparecem antes de cada resposta.
+- Simulated time: Saturday, 2026-11-07 15:00 (pinned with `--now`)
+- Model: `google_genai:gemini-flash-latest`
+- Session: `64db12eb9c54`
+- Generated with `emporio-chat --verbose --transcript`; tool calls appear before each reply. The conversation is in Brazilian Portuguese, the store's language.
+
+## Summary (English)
+
+Pinned to a **Saturday at 3pm**, after the store closed (Saturdays 9am–1pm).
+
+| # | Customer (translated) | What Dó did |
+|---|---|---|
+| 1 | "Hi, where is my order 8? It should have arrived a long time ago" | Asked for the e-mail or phone used in the purchase **before** looking anything up (LGPD). |
+| 2 | (gives the e-mail) | Verified order 8 against the contact: shipped, tracking code BRJL5544332BR, estimated delivery 28/02/2026, so it is **late**. Apologized and offered to escalate to the team. |
+| 3 | "Yes, please, send it to the team" | Opened a human hand-off: **protocol EMP-20261107-0001**, reply within 24 business hours, and said the team is back **Monday 09/11 at 9am** because the store is closed now. |
 
 ---
 
-**👤 Cliente:** Oi, cadê meu pedido 8? Já era pra ter chegado faz tempo
+**👤 Customer:** Oi, cadê meu pedido 8? Já era pra ter chegado faz tempo
 
 **🎵 Dó:** Olá! Sou a **Dó**, assistente virtual da **Empório da Música**. 🎸
 
@@ -15,7 +25,7 @@ Com certeza vou te ajudar a verificar o que aconteceu com a entrega!
 
 Por questões de segurança e privacidade (LGPD), você poderia me confirmar o **e-mail** ou o **telefone com DDD** cadastrado na compra do pedido nº 8?
 
-**👤 Cliente:** anacarol.ferreira@coldmail.com
+**👤 Customer:** anacarol.ferreira@coldmail.com
 
 <details><summary>🔧 <code>get_order(order_id=8, contact="anacarol.ferreira@coldmail.com")</code></summary>
 
@@ -49,7 +59,7 @@ Como a entrega passou do prazo previsto, posso abrir um chamado e encaminhar o s
 
 Você gostaria que eu faça esse encaminhamento agora?
 
-**👤 Cliente:** Sim, por favor, encaminha pra equipe
+**👤 Customer:** Sim, por favor, encaminha pra equipe
 
 <details><summary>🔧 <code>handoff_to_human(summary="Pedido nº 8 de Ana (1x Kala KA-C Concert Mogno, R$ 349,90) enviado com rastreio BRJL5544332BR, com entrega atrasada (previsão original 28/02/2026). Cliente confirmou encaminhamento para cobrança junto à transportadora.", contact="anacarol.ferreira@coldmail.com", reason="pedido_atrasado")</code></summary>
 

@@ -32,17 +32,17 @@ SUMMARY_CHARS = 160
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="emporio-chat", description="Converse com a Dó, assistente da Empório da Música."
+        prog="emporio-chat", description="Chat with Dó, the Empório da Música assistant."
     )
-    parser.add_argument("--session", help="id da sessão (retoma a memória de uma conversa)")
+    parser.add_argument("--session", help="session id (resumes a conversation's memory)")
     parser.add_argument(
         "--now",
         type=_iso_datetime,
-        help="fixa o 'agora' (ISO 8601, horário de Campo Grande), ex.: 2026-11-07T15:00",
+        help="pins 'now' (ISO 8601, Campo Grande time), e.g. 2026-11-07T15:00",
     )
-    parser.add_argument("--verbose", action="store_true", help="mostra as chamadas de tool")
+    parser.add_argument("--verbose", action="store_true", help="show tool calls")
     parser.add_argument(
-        "--transcript", type=Path, help="salva a conversa em Markdown (com as tools)"
+        "--transcript", type=Path, help="save the conversation as Markdown (with tool calls)"
     )
     return parser.parse_args(argv)
 
@@ -51,7 +51,7 @@ def _iso_datetime(value: str) -> str:
     try:
         datetime.fromisoformat(value)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError(f"data/hora inválida: {value!r}") from exc
+        raise argparse.ArgumentTypeError(f"invalid date/time: {value!r}") from exc
     return value
 
 
@@ -77,15 +77,15 @@ class Transcript:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
         now = clock.now()
-        pinned = " (fixado com `--now`)" if config.now_override() else ""
+        pinned = " (pinned with `--now`)" if config.now_override() else ""
         path.write_text(
-            "# Conversa com a Dó — Empório da Música\n\n"
-            f"- Momento simulado: {clock.WEEKDAYS_PT[now.weekday()]}, "
-            f"{now:%d/%m/%Y %H:%M}{pinned}\n"
-            f"- Modelo: `{config.llm_model()}`\n"
-            f"- Sessão: `{session_id}`\n"
-            "- Gerado com `emporio-chat --verbose --transcript`; as chamadas de tool aparecem "
-            "antes de cada resposta.\n\n---\n",
+            "# Conversation with Dó — Empório da Música\n\n"
+            f"- Simulated time: {now:%A, %Y-%m-%d %H:%M}{pinned}\n"
+            f"- Model: `{config.llm_model()}`\n"
+            f"- Session: `{session_id}`\n"
+            "- Generated with `emporio-chat --verbose --transcript`; tool calls appear before "
+            "each reply. The conversation is in Brazilian Portuguese, the store's language.\n"
+            "\n---\n",
             encoding="utf-8",
         )
 
@@ -94,7 +94,7 @@ class Transcript:
             file.write(text)
 
     def turn(self, message: str, reply: Reply) -> None:
-        parts = [f"\n**👤 Cliente:** {message}\n"]
+        parts = [f"\n**👤 Customer:** {message}\n"]
         for call in reply.tool_calls:
             body = json.dumps(call.result, ensure_ascii=False, indent=2)
             parts.append(
@@ -105,7 +105,7 @@ class Transcript:
         self._append("".join(parts))
 
     def new_session(self, session_id: str) -> None:
-        self._append(f"\n---\n\n*Nova sessão: `{session_id}`*\n")
+        self._append(f"\n---\n\n*New session: `{session_id}`*\n")
 
 
 # --------------------------------------------------------------------------- loop

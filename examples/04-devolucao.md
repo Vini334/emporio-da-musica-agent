@@ -1,13 +1,21 @@
-# Conversa com a Dó — Empório da Música
+# Conversation with Dó — Empório da Música
 
-- Momento simulado: terça-feira, 03/11/2026 10:00 (fixado com `--now`)
-- Modelo: `google_genai:gemini-flash-latest`
-- Sessão: `e4f8808c456a`
-- Gerado com `emporio-chat --verbose --transcript`; as chamadas de tool aparecem antes de cada resposta.
+- Simulated time: Tuesday, 2026-11-03 10:00 (pinned with `--now`)
+- Model: `google_genai:gemini-flash-latest`
+- Session: `e4f8808c456a`
+- Generated with `emporio-chat --verbose --transcript`; tool calls appear before each reply. The conversation is in Brazilian Portuguese, the store's language.
+
+## Summary (English)
+
+| # | Customer (translated) | What Dó did |
+|---|---|---|
+| 1 | "Hi! I regret a purchase, can I return it?" | Looked up the policy (7 calendar days after receipt for online purchases, original packaging, refund in up to 10 business days, return shipping paid by the store) and asked for the order number and contact. |
+| 2 | "Order 4, my phone is (67) 99812-3456" | Verified the order and checked eligibility: received 22/12/2025, so the regret window **ended on 29/12/2025**. Declined, and pointed to the manufacturer's warranty if a defect appears. |
+| 3 | "Oh well. What if it's defective? The neck warped and the strings buzz, I never dropped it" | Checked again for a defect: in-store exchange (30 days after purchase) ended 09/01/2026 and the legal warranty (90 days after receipt) ended 22/03/2026. The remaining path is the **manufacturer's warranty**, with the store acting as intermediary; offered to escalate. |
 
 ---
 
-**👤 Cliente:** Oi! Me arrependi de uma compra, posso devolver?
+**👤 Customer:** Oi! Me arrependi de uma compra, posso devolver?
 
 <details><summary>🔧 <code>search_policies(question="prazo e regras para devolver por arrependimento")</code></summary>
 
@@ -48,7 +56,7 @@ Se você já quiser verificar a devolução do seu pedido por aqui, só me passa
 1. O **número do pedido**
 2. O **e-mail ou telefone** (com DDD) cadastrado na compra
 
-**👤 Cliente:** Pedido 4, meu telefone é (67) 99812-3456
+**👤 Customer:** Pedido 4, meu telefone é (67) 99812-3456
 
 <details><summary>🔧 <code>check_return_eligibility(order_id=4, reason="arrependimento", contact="(67) 99812-3456")</code></summary>
 
@@ -90,7 +98,7 @@ Se o instrumento estiver apresentando algum defeito de fabricação que ainda es
 
 Posso te ajudar com mais alguma dúvida?
 
-**👤 Cliente:** Poxa. E se ele tiver com defeito? O braço empenou e as cordas tão trastejando, nunca deixei cair
+**👤 Customer:** Poxa. E se ele tiver com defeito? O braço empenou e as cordas tão trastejando, nunca deixei cair
 
 <details><summary>🔧 <code>check_return_eligibility(order_id=4, contact="(67) 99812-3456", reason="defeito")</code></summary>
 
