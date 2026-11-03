@@ -1,157 +1,159 @@
-# Decisões de design
+# Design decisions
 
-Registro das decisões tomadas antes de escrever código. Elas saíram de uma sessão de
-planejamento em formato de "árvore de decisões": cada rodada só tratou das decisões cujos
-pré-requisitos já estavam resolvidos. Cada item traz a escolha e o porquê.
+The decisions made before writing code. They came out of a planning session run as a "decision
+tree": each round only covered decisions whose prerequisites were already settled. Each item
+gives the choice and the reason for it.
 
-## 1. Escopo e posicionamento
+## 1. Scope and positioning
 
-| Decisão | Escolha | Por quê |
+| Decision | Choice | Why |
 |---|---|---|
-| Quem usa o agente | O **cliente final**, direto (o "assistente virtual" do WhatsApp citado no manual, §7), com passagem para um humano | Todos os cenários do enunciado são falas de cliente. "Auxiliar a equipe" foi interpretado como absorver as perguntas recorrentes e escalar o resto. |
-| Escopo | Todos os requisitos obrigatórios, mais avaliação automatizada e testes. Streamlit e LLM como juiz só se sobrar tempo | A avaliação é o que mais diferencia um protótipo de LLM confiável. |
-| Interface | CLI primeiro; núcleo do agente desacoplado da interface | O enunciado foca no agente funcionando. |
+| Who uses the agent | The **end customer**, directly (the WhatsApp "virtual assistant" described in manual §7), with a hand-off to a human | Every scenario in the brief is a customer message. "Helping the team" was read as absorbing the recurring questions and escalating the rest. |
+| Scope | Every mandatory requirement, plus automated evaluation and tests. Streamlit and LLM-as-judge only if time allowed | Evaluation is what most separates a reliable LLM prototype from a demo. |
+| Interface | CLI first; the agent core is decoupled from the interface | The brief focuses on the agent working correctly. |
 
-## 2. LLM e framework
+## 2. LLM and framework
 
-| Decisão | Escolha | Por quê |
+| Decision | Choice | Why |
 |---|---|---|
-| Provedor | **Agnóstico** via `init_chat_model` (`LLM_MODEL=<provider>:<model>`). Padrão: **Gemini Flash (free tier)** | Quem avalia consegue rodar sem custo, e trocar de provedor é só mudar uma variável. |
-| Framework | **LangGraph** (grafo agente ↔ tools) | Padrão de mercado; troca de provedor por config; checkpointer pronto para memória; um grafo explícito facilita adicionar nós de verificação ou de passagem para humano. |
-| Memória | Persistida em **SQLite** por `session_id` (`SqliteSaver`) | No WhatsApp a conversa continua; memória por cliente identificado ficou de fora por envolver LGPD. |
+| Provider | **Provider-agnostic** via `init_chat_model` (`LLM_MODEL=<provider>:<model>`). Default: **Gemini Flash (free tier)** | Reviewers can run it at no cost, and switching provider is a single variable. |
+| Framework | **LangGraph** (agent ↔ tools graph) | Industry standard; provider switch by config; a ready-made checkpointer for memory; an explicit graph makes it easy to add verification or hand-off nodes. |
+| Memory | Persisted in **SQLite** per `session_id` (`SqliteSaver`) | On WhatsApp the conversation carries on; per-identified-customer memory was left out because it involves LGPD (Brazil's data protection law). |
 
-## 3. Acesso a dados (CSVs)
+## 3. Data access (CSVs)
 
-**Tools determinísticas e tipadas**, sem text-to-SQL. O LLM só escolhe a tool e os argumentos;
-as regras de negócio ficam em Python, onde são testáveis. Isso torna a LGPD uma garantia do código
-(o modelo não tem como consultar a tabela de clientes), torna auditável cada número que o agente
-fala e impede que o LLM "aplique" uma promoção inativa ou acumule o PIX com uma promoção. A lista
-de tools e os contratos estão em [`SPEC.md` §6](SPEC.md#6-contratos-das-tools).
+**Deterministic, typed tools**, no text-to-SQL. The LLM only picks the tool and its arguments;
+the business rules live in Python, where they can be tested. This makes LGPD compliance a
+guarantee of the code (the model has no way to query the customers table), makes every number the
+agent says auditable, and prevents the LLM from "applying" an inactive promotion or stacking the
+PIX discount on top of a promotion. The tool list and contracts are in
+[`SPEC.md` §6](SPEC.md#6-tool-contracts).
 
-Text-to-SQL ficou registrado como evolução, para perguntas abertas sobre o catálogo.
+Text-to-SQL was recorded as a possible evolution, for open-ended catalog questions.
 
-## 4. Políticas (PDF): RAG exposto como tool
+## 4. Policies (PDF): RAG exposed as a tool
 
-- O manual é quebrado em trechos **por seção/subseção** (4.1, 4.2…), com o título no metadado, porque o documento já é estruturado assim.
-- Embeddings **locais e multilíngues** via `fastembed` (ONNX, sem PyTorch), guardadas no **Chroma** persistente. Não exige uma segunda chave de API nem depende do provedor do LLM.
-- Fica exposto como a tool `search_policies(question)`: o agente decide **quando** consultar.
-- Para 8 páginas, colocar o manual inteiro no prompt também funcionaria. O RAG foi escolhido para escalar para manuais maiores e para deixar explícita a decisão de quando consultar política e quando consultar dados.
-- **Busca híbrida (decidida na fase 3):** só com embeddings, o MiniLM multilíngue acertou a seção esperada no top-3 em 14 de 20 perguntas de teste. Errou justamente o vocabulário próprio da loja: "parcelar em quantas vezes" (não trouxe a §3.1), "boquilha" (§4.4), "trocar a cor" (§4.3), "boleto" (§3), "frete para Dourados" e "chegou quebrado" (§5.2). Somando um BM25 com radical de 5 letras ("parcelar" ≈ "Parcelamento") e fundindo os dois rankings por RRF, foram **20 de 20**. Com 25 trechos, o BM25 em memória não custa nada. Alternativas descartadas: modelo maior (mpnet, ~1 GB de download para quem avalia) e palavras-chave escritas à mão por seção (manutenção manual a cada versão do manual).
-- **Extração em modo layout do `pypdf`:** o modo padrão devolve uma palavra por linha, o que apaga a diferença entre cabeçalho ("4.1 …" na coluna 0) e item numerado de lista (indentado). No modo layout essa diferença sobrevive, e as tabelas saem com colunas separadas por espaços largos, que viram `a | b | c`.
+- The manual is split into chunks **by section/subsection** (4.1, 4.2…), with the title in the metadata, because the document is already structured that way.
+- **Local, multilingual** embeddings via `fastembed` (ONNX, no PyTorch), stored in a persistent **Chroma** collection. No second API key and no dependency on the LLM provider.
+- Exposed as the `search_policies(question)` tool: the agent decides **when** to look things up.
+- For 8 pages, putting the whole manual in the prompt would also work. RAG was chosen to scale to larger manuals and to make the "policy or data?" decision explicit.
+- **Hybrid search (decided in phase 3):** with embeddings only, the multilingual MiniLM had the expected section in its top-3 for 14 of 20 test questions. It missed exactly the store's own vocabulary: "parcelar em quantas vezes" (installments; did not bring §3.1), "boquilha" (mouthpiece, §4.4), "trocar a cor" (exchange for another color, §4.3), "boleto" (§3), "frete para Dourados" (shipping to another city) and "chegou quebrado" (arrived broken, §5.2). Adding BM25 with a 5-letter stem ("parcelar" ≈ "Parcelamento") and fusing both rankings with Reciprocal Rank Fusion gave **20 of 20**. With 25 chunks, an in-memory BM25 costs nothing. Discarded alternatives: a larger model (mpnet, ~1 GB download for the reviewer) and hand-written keywords per section (manual upkeep for every new version of the manual).
+- **`pypdf` in layout mode:** the default mode returns one word per line, which erases the difference between a heading ("4.1 …" at column 0) and a numbered list item (indented). Layout mode keeps that difference, and tables come out with columns separated by wide spaces, which are turned into `a | b | c`.
 
-## 5. Tratamento de dados
+## 5. Data handling
 
-O **bruto fica intocado** (`data/raw`). O script `python -m emporio.data.prepare` gera uma
-**camada padronizada** (`data/processed`, um JSON por tabela) e o
+The **raw data is never edited** (`data/raw`). The `python -m emporio.data.prepare` script builds
+a **standardized layer** (`data/processed`, one JSON per table) and the
 [`data_quality_report.md`](data_quality_report.md).
 
-- **Padronização técnica (feita):** tipos, enums de status, parse do JSON de specs, nome normalizado para busca (sem acento, minúsculo) e nomes de arquivo sem espaço e acento.
-- **Correção de conteúdo (não feita):** nada é reescrito nem recalculado. O registro é marcado e uma regra de negócio é aplicada:
-  - Descrição que contradiz o nome ou as specs (produtos 135–144): **não é mostrada**. O agente usa só nome + specs + preço.
-  - Totais de pedido divergentes (pedidos 3 e 20): vale o `total_brl` registrado (é o que o cliente pagou). A divergência vai para o relatório.
-  - `discontinued` com estoque (136): não é oferecido, conforme o manual §7.3.
-  - `coming_soon` (130): apresentado como "lançamento em breve", sem venda e sem prazo prometido, mesmo havendo pedidos antigos dele.
+- **Technical standardization (done):** types, status enums, parsing of the specs JSON, a normalized name for search (no accents, lowercase) and file names without spaces or accents.
+- **Content correction (not done):** nothing is rewritten or recalculated. The record is flagged and a business rule is applied:
+  - A description that contradicts the name or specs (products 135–144) is **not shown**. The agent uses only name + specs + price.
+  - Order totals that differ from their items (orders 3 and 20): the recorded `total_brl` prevails (it is what the customer paid). The mismatch goes to the report.
+  - `discontinued` with stock (136): never offered, as manual §7.3 says.
+  - `coming_soon` (130): presented as "coming soon", not for sale and with no promised date, even though there are past orders for it.
 
-## 6. Suposições sobre ambiguidades do manual
+## 6. Assumptions about ambiguities in the manual
 
-| Ambiguidade | Suposição adotada |
+| Ambiguity | Assumption adopted |
 |---|---|
-| Parcelamento: a tabela da §3 diz "mínimo R$100", a §3.1 tem faixas | Vale a **§3.1** (mais específica): até 3x com parcela mínima de R$50; 4–6x com R$80; 7–12x com R$100 |
-| Dois WhatsApps: (67) 3341-4444 (§1.2) e (67) 3321-4500 (§7) | WhatsApp = **(67) 3321-4500** (seção específica do canal); telefone = (67) 3341-4444 |
-| E-mail com acento no domínio (§1.2) | Usar `contato@emporiodamusica.com.br` (da capa); o acento é tratado como erro de digitação |
-| O arrependimento só vale para compra online, e os pedidos não têm canal | Todo pedido do sistema é tratado como **online** (todos têm entrega e rastreio) |
-| Os pedidos não têm data real de entrega | Usa `estimated_delivery` como data de recebimento, avisando o cliente quando a conclusão depende disso |
-| Frete fora da região metropolitana não tem tabela | Calcula só a região metropolitana (grátis **acima** de R$500, senão R$35). Fora dela, informa as modalidades e prazos e não inventa valor; item de grande porte vai para cotação com um humano |
-| "Mais de 300 instrumentos", sopros e cordas orquestrais | Vale o **sistema** (65 produtos; categorias 6–8 vazias). O agente nunca afirma ter o que não está na base |
-| Black Friday em novembro (§6.1) e promoções inativas no CSV | Vale o **sistema** (§7.3): só é aplicada promoção com `is_active=1` |
-| Frete especial de itens de grande porte aparece só na §5.2 (outras cidades) | Vale **em qualquer cidade**, inclusive Campo Grande: na dúvida, é melhor um humano cotar do que prometer frete grátis por motoboy para uma bateria acústica |
-| "Pedidos acima de R$ 500" para frete grátis | Compara o preço com a promoção aplicada, antes do desconto do PIX (o meio de pagamento ainda não está definido na conversa) |
-| Arredondamento de parcelas e descontos | Centavos com arredondamento "meio para cima", como em recibos (349,90 em 4x = R$ 87,48) |
-| Orçamento ("violões até R$ 1000") | O teto compara o **menor** preço possível (PIX ou promoção), e a lista mostra primeiro os itens mais próximos do orçamento; o total encontrado vai junto para o agente oferecer refinar |
-| Telefone informado pelo cliente | Só os dígitos contam; `+55` é opcional e o DDD é obrigatório (sem DDD não verifica, para não confundir clientes) |
+| Installments: the §3 table says "minimum R$100", §3.1 has tiers | **§3.1** prevails (more specific): up to 3x with a R$50 minimum installment; 4–6x with R$80; 7–12x with R$100 |
+| Two WhatsApp numbers: (67) 3341-4444 (§1.2) and (67) 3321-4500 (§7) | WhatsApp = **(67) 3321-4500** (the channel's own section); phone = (67) 3341-4444 |
+| E-mail with an accent in the domain (§1.2) | Use `contato@emporiodamusica.com.br` (from the cover page); the accent is treated as a typo |
+| The right of withdrawal (regret) applies only to online purchases, and orders have no channel | Every order in the system is treated as **online** (all of them have delivery and tracking) |
+| Orders have no actual delivery date | `estimated_delivery` is used as the date of receipt, telling the customer when the conclusion depends on it |
+| Shipping outside the metro area has no price table | Only the metro area is calculated (free **above** R$500, otherwise R$35). Elsewhere, the agent gives the shipping options and lead times and never invents a price; large items go to a human for a quote |
+| "More than 300 instruments", wind and orchestral string instruments | The **system** prevails (65 products; categories 6–8 empty). The agent never claims to have what is not in the data |
+| Black Friday in November (§6.1) and inactive promotions in the CSV | The **system** prevails (§7.3): only promotions with `is_active=1` are applied |
+| Special shipping for large items appears only in §5.2 (other cities) | It applies **in any city**, Campo Grande included: when in doubt, it is better for a human to quote than to promise free motorcycle delivery of an acoustic drum kit |
+| "Orders above R$ 500" for free shipping | Compares the price with the promotion applied, before the PIX discount (the payment method is not settled yet in the conversation) |
+| Rounding of installments and discounts | Cents rounded "half up", as on receipts (349,90 in 4x = R$ 87,48) |
+| Budget ("acoustic guitars up to R$ 1000") | The ceiling compares the **lowest** possible price (PIX or promotion). The list shows first the items closest to the budget that fit at full price; items that only fit when paying by PIX go last. The total found and the price range go to the agent so it can offer the rest |
+| Phone given by the customer | Only the digits count; `+55` is optional and the area code (DDD) is mandatory (without it the check fails, so customers are not confused with each other) |
 
-## 7. Data, hora e horário de funcionamento
+## 7. Date, time and opening hours
 
-A data e a hora atuais em **`America/Campo_Grande` (UTC-4)**, e se a loja está aberta (incluindo
-feriados nacionais, de MS e de Campo Grande, via a biblioteca `holidays`), são injetadas no prompt
-a cada turno. O relógio pode ser fixado por `EMPORIO_NOW`, para que exemplos e avaliações sejam
-reproduzíveis.
+The current date and time in **`America/Campo_Grande` (UTC-4)**, and whether the store is open
+(including national, Mato Grosso do Sul and Campo Grande holidays, via the `holidays` library),
+are injected into the prompt on every turn. The clock can be pinned with `EMPORIO_NOW`, so
+examples and evaluations are reproducible.
 
-## 8. Persona e guardrails
+## 8. Persona and guardrails
 
-- **"Dó"**, assistente virtual da Empório. Tom informal mas profissional (§7.1), mensagens curtas no estilo WhatsApp, emoji pontual. Sempre se identifica como assistente virtual.
-- **Fora do escopo**, em três níveis:
-  1. Acessórios: redirecionamento educado, conforme o manual.
-  2. Assunto alheio à loja: recusa simpática e volta ao tema.
-  3. Prompt injection ou engenharia social: recusa.
-- **A defesa real está nas tools**: o modelo não tem acesso à tabela de clientes nem a qualquer forma de "aplicar desconto". Um classificador de entrada separado ficou como evolução.
+- **"Dó"** (the note C, as in do-re-mi), the store's virtual assistant. Informal but professional tone (manual §7.1), short WhatsApp-style messages, occasional emoji. Always introduces itself as a virtual assistant.
+- **Out of scope**, at three levels:
+  1. Accessories: polite redirection, as the manual says.
+  2. Topics unrelated to the store: a friendly refusal and back to the subject.
+  3. Prompt injection or social engineering: refusal.
+- **The real defense is in the tools:** the model has no access to the customers table and no way to "apply a discount". A separate input classifier was left as a possible evolution.
 
-## 9. Agente e interface (fase 4)
+## 9. Agent and interface (phase 4)
 
-- **`create_agent` do LangChain 1.x** (um grafo ReAct do LangGraph) com middlewares, em vez de um `StateGraph` escrito à mão: o laço agente ↔ tools é o padrão, e os pontos de extensão necessários já existem como middleware.
-  - `dynamic_prompt`: o prompt é remontado a **cada chamada do modelo**, então o bloco do relógio (agora, loja aberta ou fechada, quando a equipe volta) nunca fica velho numa conversa longa.
-  - `ModelRetryMiddleware`: 3 novas tentativas com backoff exponencial (5 s, 10 s, 20 s) para o rate limit do free tier do Gemini. Se todas falharem, o cliente recebe uma mensagem amigável com o WhatsApp da loja, e não um stack trace.
-  - `ToolCallLimitMiddleware`: no máximo 8 chamadas de tool por turno, com o modelo encerrando a resposta (em vez de um erro) se passar disso.
-- **Modelo:** `gemini-flash-latest`, confirmado listando os modelos com a chave em 02/11/2026. É um alias que acompanha o Flash estável mais recente; para fixar uma versão, basta trocar o `LLM_MODEL`. Temperatura 0,2.
-- **`session_id` na passagem para humano:** a tool lê o `thread_id` do `RunnableConfig` injetado pelo LangChain (o argumento não aparece no schema que o LLM vê). O modelo não tem como escolher nem forjar a sessão.
-- **Protocolo `EMP-AAAAMMDD-NNNN`:** sequência por dia, calculada a partir do próprio `handoffs.jsonl` (fonte única, sem contador separado), com um lock para escritas concorrentes no mesmo processo.
-- **`Assistant.send()`** devolve o texto e as chamadas de tool do turno (nome, argumentos, resultado). A CLI, o transcript e a avaliação (fase 6) usam a mesma interface, sem depender do formato interno das mensagens do LangGraph.
-- **CLI por stdin:** sem terminal interativo, cada linha é uma mensagem. Os exemplos saem de um comando reproduzível (`printf ... | emporio-chat --now ... --transcript ...`), não de uma sessão digitada à mão.
+- **LangChain 1.x `create_agent`** (a LangGraph ReAct graph) with middleware, instead of a hand-written `StateGraph`: the agent ↔ tools loop is the standard one, and the extension points needed already exist as middleware.
+  - `dynamic_prompt`: the prompt is rebuilt on **every model call**, so the clock block (now, store open or closed, when the team is back) never goes stale in a long conversation.
+  - `ModelRetryMiddleware`: 3 retries with exponential backoff (5 s, 10 s, 20 s) for the Gemini free-tier rate limit. If all fail, the customer gets a friendly message with the store's WhatsApp, not a stack trace.
+  - `ToolCallLimitMiddleware`: at most 8 tool calls per turn, with the model wrapping up the reply (instead of an error) beyond that.
+- **Model:** `gemini-flash-latest`, confirmed by listing the models with the API key on 2026-11-02. It is an alias that follows the latest stable Flash; to pin a version, change `LLM_MODEL`. Temperature 0.2.
+- **`session_id` in the hand-off:** the tool reads the `thread_id` from the `RunnableConfig` injected by LangChain (the argument does not appear in the schema the LLM sees). The model cannot choose or forge the session.
+- **Protocol `EMP-YYYYMMDD-NNNN`:** a per-day sequence computed from `handoffs.jsonl` itself (single source, no separate counter), with a lock for concurrent writes within the same process.
+- **`Assistant.send()`** returns the turn's text and tool calls (name, arguments, result). The CLI, the transcript and the evaluation (phase 6) use the same interface, without depending on the internal format of LangGraph messages.
+- **CLI over stdin:** without an interactive terminal, each line is a message. The examples come from a reproducible command (`printf ... | emporio-chat --now ... --transcript ...`), not from a hand-typed session.
 
-## 10. Qualidade
+## 10. Quality
 
-- Testes unitários das tools e da preparação de dados (`pytest`).
-- Suíte de avaliação com cerca de 25 casos (YAML): checagens determinísticas (tool esperada, números que devem ou não aparecer). LLM como juiz para o tom, se houver tempo.
+- Unit tests for the tools and data preparation (`pytest`).
+- An evaluation suite of about 25 cases (YAML): deterministic checks (expected tool, numbers that must or must not appear). LLM-as-judge for tone, if time allowed.
 
-**Avaliação ponta a ponta (decidida na fase 6):**
+**End-to-end evaluation (decided in phase 6):**
 
-- **33 casos** em `eval/cases.yaml`, cobrindo as 10 categorias da SPEC (§12). Cada caso cita a regra (BR-nn) ou a armadilha de dados que testa, e os valores esperados saem das tools determinísticas, não de uma redação "ideal".
-- **Checagens por turno, não só no final.** A expectativa pode estar em qualquer turno; a do caso vale para o último. Sem isso não daria para testar a LGPD em conversa: no turno 1 de "cadê meu pedido 13?" o agente **não pode** chamar `get_order`; no turno 2, com o telefone, tem que chamar.
-- **Âncoras robustas à redação:** o texto é comparado sem acento, sem maiúsculas e sem negrito; números (R$, datas, %) são as âncoras principais porque vêm das tools; `must_contain_any` aceita sinônimos ("esgotado", "sem estoque", "indisponível"); `must_not_contain` pega o erro típico (PIX acumulado com promoção, a promoção inativa aplicada, dado de outro cliente). Checar argumentos de tool (`tool_args`) confirma que o pedido consultado é o certo.
-- **Erro de infraestrutura ≠ falha do agente.** Se o modelo falhar depois das novas tentativas (rate limit do free tier), o caso sai como "erro" e não conta como falha de comportamento; o relatório mostra a taxa com e sem esses casos.
-- **Isolamento:** cada caso roda numa conversa nova (checkpointer em memória), com o relógio fixado por caso, e a fila de passagem para humano vai para um arquivo temporário. A avaliação não suja `storage/`.
-- **Código de saída 1** se algum caso falhar ou der erro, para poder virar um gate no CI.
-- **Calibração:** a primeira rodada deu 29/33. Três falhas eram da suíte (sinônimo faltando, um trecho proibido que casava com a negação, "temos violino" dentro de "não temos violinos", e um caso de boquilha que não faz sentido numa loja sem sopros) e foram corrigidas nos casos. A quarta era do agente: na devolução fora do prazo, ele não dizia qual caminho ainda valia (BR-10). Isso foi corrigido no **prompt** (situação especial "troca ou devolução fora do prazo"), não afrouxando o caso. A segunda rodada completa deu 33/33.
-- **LLM como juiz ficou de fora** desta fase: as checagens determinísticas cobrem o que é regra de negócio; tom e cordialidade ficaram para a fase 7.
+- **33 cases** in `eval/cases.yaml` (34 after the final review, see §12), covering the SPEC's 10 categories (§12). Each case cites the rule (BR-nn) or the data trap it tests, and the expected values come from the deterministic tools, not from an "ideal" wording.
+- **Per-turn checks, not just at the end.** An expectation can sit on any turn; the case-level one applies to the last turn. Without this, LGPD could not be tested in a conversation: on turn 1 of "where is my order 13?" the agent **must not** call `get_order`; on turn 2, with the phone number, it must.
+- **Anchors robust to wording:** text is compared without accents, case or bold; numbers (R$, dates, %) are the main anchors because they come from the tools; `must_contain_any` accepts synonyms ("esgotado", "sem estoque", "indisponível", all meaning out of stock); `must_not_contain` catches the typical mistake (PIX stacked on a promotion, the inactive promotion applied, another customer's data). Checking tool arguments (`tool_args`) confirms the right order was looked up.
+- **Infrastructure error ≠ agent failure.** If the model fails after the retries (free-tier rate limit), the case is reported as "error" and does not count as a behavior failure; the report shows the rate with and without those cases.
+- **Isolation:** each case runs in a fresh conversation (in-memory checkpointer), with the clock pinned per case, and the hand-off queue goes to a temporary file. The evaluation leaves `storage/` untouched.
+- **Exit code 1** if any case fails or errors, so it can become a CI gate.
+- **Calibration:** the first run scored 29/33. Three failures were the suite's own fault (a missing synonym; a forbidden snippet that matched the negation, "temos violino" inside "não temos violinos"; and a mouthpiece case that makes no sense for a store without wind instruments) and were fixed in the cases. The fourth was the agent's: for a return past its deadline, it did not say which path was still open (BR-10). That was fixed in the **prompt** (special situation "exchange or return past the deadline"), not by loosening the case. The second full run scored 33/33.
+- **LLM-as-judge was left out** of this phase: the deterministic checks cover the business rules; tone and courtesy were left for phase 7.
 
-**LLM como juiz (decidido na fase 7):**
+**LLM as judge (decided in phase 7):**
 
-- **Só forma, nunca conteúdo.** O que é regra de negócio já tem checagem determinística; pedir a um LLM para julgar preço ou prazo traria ruído e duplicaria a fonte de verdade. A rubrica do juiz manda ignorar a correção dos dados e não penalizar as recusas previstas (desconto, dados de terceiros, fora do escopo), só a simpatia delas.
-- **Quatro critérios, de 1 a 5, tirados do próprio prompt** (persona e tom da §9): tom, cordialidade, concisão (estilo WhatsApp, sem jargão interno) e encaminhamento (próximo passo, uma pergunta por vez). Nota por critério, e não uma nota única, para a média apontar *o que* melhorar.
-- **Saída estruturada** (`with_structured_output` com um modelo Pydantic, `ge=1, le=5`) e temperatura 0, com retry para o rate limit. Uma falha do juiz vira "sem nota" no caso e não interrompe a rodada.
-- **O juiz vê os nomes das tools, não os JSONs.** Assim ele sabe que a resposta foi fundamentada sem ser tentado a conferir números.
-- **Informativo, sem gate.** As notas não mudam o status nem o código de saída: com um juiz do mesmo modelo que respondeu, há viés de autopreferência (tende a dar nota alta), e um limiar fixo viraria um gate frágil. Mitigação: `--judge-model`/`JUDGE_MODEL` permite usar outro provedor; a rubrica pede severidade ("um 5 deve ser difícil de melhorar"). **Calibração:** uma resposta deliberadamente ruim (fria, com jargão interno e sem próximo passo) recebeu 1 nos quatro critérios, então o juiz discrimina; o teto alto nas conversas reais é, em parte, mérito do prompt e, em parte, esse viés.
-- **Calibração da suíte nesta fase:** a rodada de teste do juiz pegou um falso negativo em `horario-feriado` ("a equipe está de folga" é correto, mas não continha "fechad"). Os sinônimos foram adicionados ao caso, com o mesmo critério da fase 6: corrigir a suíte quando a resposta está certa, e o prompt quando não está. A rodada completa seguinte deu 32/33, com um desvio real: em `politica-itens-sem-troca` a busca trouxe a §4.4 em 1º e o modelo generalizou que "todos podem ser trocados". A correção foi uma regra **geral** no prompt (usar todos os trechos, inclusive exceções e itens não elegíveis, e nunca generalizar contra eles), não um texto específico do caso; o caso passou 4 de 4 repetições e a rodada final deu 33/33, com média 4,9 do juiz.
+- **Form only, never content.** Business rules already have deterministic checks; asking an LLM to judge prices or deadlines would add noise and duplicate the source of truth. The judge's rubric says to ignore data correctness and not to penalize the expected refusals (discount, third-party data, out of scope), only how kind they are.
+- **Four criteria, 1 to 5, taken from the prompt itself** (persona and tone, SPEC §9): tone, courtesy, concision (WhatsApp style, no internal jargon) and next step (a clear next step, one question at a time). One score per criterion rather than a single score, so the mean points at *what* to improve.
+- **Structured output** (`with_structured_output` with a Pydantic model, `ge=1, le=5`) and temperature 0, with retries for the rate limit. A judge failure becomes "no score" for the case and does not stop the run.
+- **The judge sees the tool names, not the JSON.** So it knows the reply was grounded without being tempted to check numbers.
+- **Informative, not a gate.** The scores do not change the status or the exit code: with a judge from the same model that answered, there is self-preference bias (it tends to score high), and a fixed threshold would make a fragile gate. Mitigation: `--judge-model`/`JUDGE_MODEL` allows another provider; the rubric asks for severity ("a 5 should be genuinely hard to improve on"). **Calibration:** a deliberately bad reply (cold, with internal jargon and no next step) got 1 on all four criteria, so the judge does discriminate; the high ceiling on real conversations is partly the prompt's merit and partly that bias.
+- **Suite calibration in this phase:** the judge's trial run caught a false negative in `horario-feriado` ("a equipe está de folga", the team is off, is correct but did not contain "fechad", closed). The synonyms were added to the case, with the same criterion as in phase 6: fix the suite when the reply is right, and the prompt when it is not. The next full run scored 32/33, with one real deviation: in `politica-itens-sem-troca` the search ranked §4.4 first and the model still generalized that "everything can be exchanged". The fix was a **general** rule in the prompt (use every excerpt, including exceptions and non-eligible items, and never generalize against them), not text specific to the case; the case passed 4 out of 4 repetitions and the final run scored 33/33, with a judge mean of 4.9.
 
-**Interface Streamlit (decidida na fase 7):**
+**Streamlit interface (decided in phase 7):**
 
-- **Mesma `build_agent()` e mesmo `Assistant.send()`** da CLI e da avaliação: a interface web não tem lógica própria de agente. O grafo compilado fica em `st.cache_resource` (um por servidor) e cada sessão do navegador tem o seu `session_id` na mesma memória SQLite.
-- **Painel lateral de tools por turno** (o mais recente aberto), com a assinatura da chamada e o JSON do resultado: é o equivalente visual do `--verbose` e o que torna o roteamento (R4) visível numa demo.
-- **Relógio simulável** na barra lateral, para demonstrar loja fechada, feriado e prazos sem mexer no `.env`. Ele grava `EMPORIO_NOW` no ambiente do processo, o que vale para todas as abas: aceitável numa demo local, documentado no código e na SPEC. Num deploy multiusuário, o relógio iria por sessão (por exemplo, no `RunnableConfig`).
-- **Streamlit como dependência principal**, não extra opcional: um único `uv sync` deixa a CLI e a web prontas; o custo é o tamanho da instalação.
-- **Testes com `AppTest`** e o mesmo modelo roteirizado dos testes do agente: turno com tool, painel, sugestões, nova conversa e relógio, sem LLM nem navegador.
+- **The same `build_agent()` and `Assistant.send()`** as the CLI and the evaluation: the web interface has no agent logic of its own. The compiled graph lives in `st.cache_resource` (one per server) and each browser session has its own `session_id` in the same SQLite memory.
+- **Per-turn tool side panel** (the latest one expanded), with the call signature and the result JSON: the visual equivalent of `--verbose`, and what makes the routing (R4) visible in a demo.
+- **Simulated clock** in the sidebar, to demo a closed store, a holiday and deadlines without touching `.env`. It writes `EMPORIO_NOW` to the process environment, which applies to every tab: acceptable for a local demo, documented in the code and in the SPEC. In a multi-user deployment, the clock would go per session (for example in the `RunnableConfig`).
+- **Streamlit as a main dependency**, not an optional extra: a single `uv sync` gets both the CLI and the web app ready; the cost is a larger install.
+- **Tests with `AppTest`** and the same scripted model used by the agent tests: a turn with a tool, the panel, suggestions, a new conversation and the clock, with no LLM and no browser.
 
-## 11. Entrega
+## 11. Delivery
 
-- 5 conversas em `examples/`, geradas pelo agente real com `EMPORIO_NOW` fixo:
-  1. catálogo até R$1000;
-  2. preço + promoção inativa;
-  3. pedido com verificação de identidade e atraso;
-  4. devolução fora do prazo;
-  5. fora do escopo + injection.
-- Código em inglês; prompts, README e exemplos em português.
-- Commits pequenos por fase: scaffold → dados → tools → RAG → agente/CLI → exemplos/README → avaliação → Streamlit.
+- 5 conversations in `examples/`, generated by the real agent with `EMPORIO_NOW` pinned:
+  1. catalog up to R$1000;
+  2. price + inactive promotion;
+  3. order with identity check and delay;
+  4. return past the deadline;
+  5. out of scope + injection.
+- **Language:** code, README, docs, generated reports and commit messages in English (the delivery requirement). The agent's prompt, tool outputs and the customer conversations stay in Brazilian Portuguese, the language of the store and its customers; each example opens with an English summary.
+- Small commits per phase: scaffold → data → tools → RAG → agent/CLI → examples/README → evaluation → Streamlit.
 
-## 12. Ajustes depois da revisão final
+## 12. Adjustments after the final review
 
-Uma revisão da entrega completa (clone limpo + leitura dos exemplos contra os dados) encontrou
-desvios que os 33 casos não pegavam. Cada um foi corrigido na causa, com teste ou caso de
-avaliação novo:
+A review of the complete delivery (fresh clone + reading the examples against the data) found
+deviations that the 33 cases did not catch. Each one was fixed at the root, with a new test or
+evaluation case:
 
-| Achado | Correção |
+| Finding | Fix |
 |---|---|
-| "Violões até R$ 1000" achava 13, mostrava 6 começando pelo GNF-3 (R$ 1.049, só cabe no PIX) e escondia os mais baratos; para o iniciante, o agente recomendava só entre os 6 mostrados | Com lista cortada, a tool devolve `price_range` e uma `note` pedindo que o agente diga quantas opções há. Itens que só cabem pagando no PIX vão para o fim. Novo `cheapest_first`, usado para iniciante e "o mais em conta". Caso `catalogo-iniciante-opcoes-mais-baratas` |
-| Ao recusar um desconto, o agente sugeria "negociar condições especiais com a equipe" | O prompt manda apresentar o preço oficial e as condições existentes, já que a equipe segue a mesma tabela. O caso `injection-desconto-40` proíbe "negociar" |
-| Numa resposta sobre parcelamento, o agente citou "parcela mínima de R$ 100,00" para tudo, a tabela contraditória do manual (§3) que o RAG trouxe | As faixas da §3.1 entram fixas no prompt, geradas de `rules/pricing.py`, com a ressalva de que o "R$ 100" vale só para 7x–12x |
-| O agente disse que a loja vende "sopros", copiando o §1 do manual, mas a categoria está vazia | Bloco "Catálogo hoje" no prompt, gerado dos dados: categorias com instrumentos à venda e categorias vazias |
-| Rodar o `prepare` em outro dia mudava o relatório versionado | A data de referência do relatório fica fixa em 02/11/2026 (`--as-of` recalcula) |
+| "Acoustic guitars up to R$ 1000" found 13, showed 6 starting with the GNF-3 (R$ 1.049, only fits when paying by PIX) and hid the cheapest ones; for a beginner, the agent recommended only among the 6 shown | A truncated list now carries `price_range` and a `note` asking the agent to say how many options exist. Items that only fit when paying by PIX go last. New `cheapest_first`, used for beginners and "the cheapest one". Case `catalogo-iniciante-opcoes-mais-baratas` |
+| When declining a discount, the agent suggested "negotiating special conditions with the team" | The prompt says to present the official price and the existing conditions, since the team follows the same price list. Case `injection-desconto-40` forbids "negociar" (negotiate) |
+| In a reply about installments, the agent quoted "parcela mínima de R$ 100,00" (minimum installment R$ 100) for everything: the contradictory §3 table that RAG retrieved | The §3.1 tiers are fixed in the prompt, generated from `rules/pricing.py`, with the caveat that the "R$ 100" applies only to 7x–12x |
+| The agent said the store sells wind instruments, copying manual §1, but that category is empty | A "Catalog today" block in the prompt, generated from the data: categories with instruments for sale and empty categories |
+| Running `prepare` on another day changed the committed report | The report's reference date is pinned to 2026-11-02 (`--as-of` recalculates) |
+| Last full run (after the translation): 33/34. In `catalogo-categoria-vazia` the agent correctly said there are no violins, but from the new "Catálogo hoje" prompt block instead of a search, which the case required | Same criterion as before: the answer is right and grounded in data, so the suite changes. The case no longer requires a tool; re-checked offline against the saved reply, without re-running the model |

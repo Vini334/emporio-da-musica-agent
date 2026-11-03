@@ -1,7 +1,7 @@
 [project]
 name = "emporio-da-musica-agent"
 version = "0.1.0"
-description = "Agente de atendimento (LLM + tools + RAG) da loja fictícia Empório da Música"
+description = "Customer service agent (LLM + tools + RAG) for the fictional Empório da Música store"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

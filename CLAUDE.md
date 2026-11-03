@@ -1,14 +1,14 @@
-# Empório da Música — agente de atendimento
+# Empório da Música — customer service agent
 
-Desafio técnico AI Engineer (Artefact). Prazo: quarta, 04/11/2026; nenhum commit depois da entrega.
+Artefact AI Engineer technical challenge. Deadline: Wednesday 2026-11-04; no commits after the delivery.
 
-- **Spec** (`docs/SPEC.md`): leia antes de implementar ou alterar qualquer coisa. É a fonte de verdade das regras de negócio (BR-nn), dos contratos das tools, do layout de módulos e do status das fases. Marque a fase como ✅ na §15 ao concluí-la.
-- **Decisões** (`docs/design-decisions.md`): o porquê das escolhas e as suposições sobre ambiguidades; consulte antes de mudar uma decisão.
+- **Spec** (`docs/SPEC.md`): read it before implementing or changing anything. It is the source of truth for the business rules (BR-nn), the tool contracts, the module layout and the phase status. Mark a phase as ✅ in §15 when it is done.
+- **Decisions** (`docs/design-decisions.md`): the reasons behind the choices and the assumptions about ambiguities; check it before changing a decision.
 
-## Convenções
+## Conventions
 
-- Regras de negócio ficam em `src/emporio/rules/` como funções puras com teste. Tools só traduzem I/O.
-- `data/raw/` é intocável; tudo que for derivado sai de `python -m emporio.data.prepare`.
-- Código em inglês; prompts, README, exemplos e docs em português.
-- Commits pequenos por fase (Conventional Commits), push a cada fase concluída.
-- Antes de commitar: `uv run ruff check . && uv run ruff format . && uv run pytest`.
+- Business rules live in `src/emporio/rules/` as pure functions with tests. Tools only translate I/O.
+- `data/raw/` is never edited; everything derived comes from `python -m emporio.data.prepare`.
+- Code, README, docs, generated reports and commit messages in English. The agent's prompt, tool outputs and customer conversations in Brazilian Portuguese.
+- Small commits per phase (Conventional Commits), no attribution trailer; push when a phase is done.
+- Before committing: `uv run ruff check . && uv run ruff format . && uv run pytest`.
