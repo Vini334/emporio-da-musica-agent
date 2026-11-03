@@ -2,16 +2,18 @@
 
 - Momento simulado: sábado, 07/11/2026 15:00 (fixado com `--now`)
 - Modelo: `google_genai:gemini-flash-latest`
-- Sessão: `837a943d5495`
+- Sessão: `64db12eb9c54`
 - Gerado com `emporio-chat --verbose --transcript`; as chamadas de tool aparecem antes de cada resposta.
 
 ---
 
 **👤 Cliente:** Oi, cadê meu pedido 8? Já era pra ter chegado faz tempo
 
-**🎵 Dó:** Olá! Eu sou a Dó, assistente virtual da Empório da Música 🎸
+**🎵 Dó:** Olá! Sou a **Dó**, assistente virtual da **Empório da Música**. 🎸
 
-Para que eu possa verificar o status do seu pedido 8 com segurança (por questão de privacidade e proteção de dados), você poderia me informar o **e-mail** ou o **telefone com DDD** cadastrado na compra?
+Com certeza vou te ajudar a verificar o que aconteceu com a entrega! 
+
+Por questões de segurança e privacidade (LGPD), você poderia me confirmar o **e-mail** ou o **telefone com DDD** cadastrado na compra do pedido nº 8?
 
 **👤 Cliente:** anacarol.ferreira@coldmail.com
 
@@ -39,26 +41,22 @@ Para que eu possa verificar o status do seu pedido 8 com segurança (por questã
 ```
 </details>
 
-**🎵 Dó:** Oi, Ana! Localizei o seu pedido nº 8 aqui.
+**🎵 Dó:** Oi, Ana! Localizei seu pedido por aqui.
 
-Sinto muito pelo transtorno com a entrega! Realmente consta um atraso:
-- **Item:** 1x Kala KA-C Concert Mogno
-- **Status:** Enviado
-- **Código de rastreio:** BRJL5544332BR
-- **Previsão inicial de entrega:** 28/02/2026
+Peço muitas desculpas pelo transtorno! O seu pedido nº 8 (**Kala KA-C Concert Mogno**, no valor de R$ 349,90) consta como enviado com o código de rastreio **BRJL5544332BR**, mas a data de entrega prevista era **28/02/2026** e ele realmente está atrasado.
 
-Como a previsão de entrega já expirou, o recomendado é acionar nossa equipe humana para abrir um chamado com a transportadora e verificar exatamente o que aconteceu.
+Como a entrega passou do prazo previsto, posso abrir um chamado e encaminhar o seu caso diretamente para a nossa equipe entrar em contato com a transportadora e resolver isso para você. 
 
-Você gostaria que eu encaminhe o seu caso para a nossa equipe agora?
+Você gostaria que eu faça esse encaminhamento agora?
 
 **👤 Cliente:** Sim, por favor, encaminha pra equipe
 
-<details><summary>🔧 <code>handoff_to_human(reason="pedido_atrasado", contact="anacarol.ferreira@coldmail.com", summary="Pedido 8 atrasado. Entrega prevista era 28/02/2026. Item: 1x Kala KA-C Concert Mogno. Rastreio: BRJL5544332BR. Contato: anacarol.ferreira@coldmail.com.")</code></summary>
+<details><summary>🔧 <code>handoff_to_human(summary="Pedido nº 8 de Ana (1x Kala KA-C Concert Mogno, R$ 349,90) enviado com rastreio BRJL5544332BR, com entrega atrasada (previsão original 28/02/2026). Cliente confirmou encaminhamento para cobrança junto à transportadora.", contact="anacarol.ferreira@coldmail.com", reason="pedido_atrasado")</code></summary>
 
 ```json
 {
   "ok": true,
-  "protocol": "EMP-20261107-0002",
+  "protocol": "EMP-20261107-0001",
   "sla": "retorno em até 24h úteis",
   "store_open_now": false,
   "next_human_window": "segunda-feira, 09/11 às 09:00"
@@ -66,11 +64,12 @@ Você gostaria que eu encaminhe o seu caso para a nossa equipe agora?
 ```
 </details>
 
-**🎵 Dó:** Prontinho, Ana! Encaminhei a sua solicitação para a nossa equipe.
+**🎵 Dó:** Prontinho, Ana! Já encaminhei o seu caso para a nossa equipe especializada. 
 
-- **Protocolo de atendimento:** EMP-20261107-0002
-- **Prazo de retorno:** até 24h úteis (entraremos em contato pelo e-mail cadastrado)
+Aqui estão as informações do seu atendimento:
+- **Protocolo:** EMP-20261107-0001
+- **Prazo de retorno:** até 24 horas úteis
 
-Como a loja está fechada agora no final de semana, a nossa equipe humana retorna na **segunda-feira (09/11) às 09:00** e já vai dar prioridade ao seu caso para verificar o ocorrido com a transportadora.
+Como a loja está fechada no momento (nosso atendimento humano encerrou às 13h deste sábado), o time estará de volta na **segunda-feira, 09/11, a partir das 09:00**, e vai priorizar a verificação com a transportadora para te dar uma posição pelo e-mail cadastrado.
 
-Se precisar de qualquer outra informação enquanto isso, estou por aqui! 🎶
+Se precisar de qualquer outra informação enquanto isso, estou por aqui!
