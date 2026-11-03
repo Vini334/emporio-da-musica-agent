@@ -229,3 +229,11 @@ def test_invalid_status_fails_loudly():
     }
     with pytest.raises(DataError, match="status"):
         build_products([row], categories)
+
+
+def test_cli_report_is_reproducible_on_any_day(tmp_path, monkeypatch):
+    monkeypatch.setenv("EMPORIO_NOW", "2027-05-20T10:00:00")
+    report = tmp_path / "report.md"
+    main(["--out-dir", str(tmp_path / "processed"), "--report", str(report)])
+    assert "02/11/2026" in report.read_text(encoding="utf-8")
+    assert "20/05/2027" not in report.read_text(encoding="utf-8")

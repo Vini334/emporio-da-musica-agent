@@ -386,6 +386,10 @@ def _json_default(value: object) -> str:
 
 # --------------------------------------------------------------------------- CLI
 
+# The committed report is a deliverable: pin its reference date (the delivery analysis) so
+# running this command on another day reproduces it byte for byte. Use --as-of to recompute.
+REPORT_AS_OF = date(2026, 11, 2)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -398,8 +402,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--as-of",
         type=date.fromisoformat,
-        default=None,
-        help="data de referência para atrasos (AAAA-MM-DD); padrão: EMPORIO_NOW ou hoje",
+        default=REPORT_AS_OF,
+        help=(
+            "data de referência para atrasos e pedidos parados no relatório (AAAA-MM-DD); "
+            f"padrão: {REPORT_AS_OF.isoformat()}, a data da análise entregue"
+        ),
     )
     args = parser.parse_args(argv)
 
