@@ -142,11 +142,13 @@ def search_products(
     min_price: float | None = None,
     max_price: float | None = None,
     only_available: bool = True,
+    cheapest_first: bool = False,
     limit: int = MAX_LIST_ITEMS,
 ) -> dict:
     """Busca instrumentos no catálogo com filtros. Use para perguntas abertas: "quais violões
     até R$ 1000?", "tem guitarra Fender?", "ukulele elétrico". Devolve preço, promoção ativa,
-    preço no PIX e parcelamento de cada item.
+    preço no PIX e parcelamento de cada item. A lista é limitada: compare `total_found` com os
+    itens devolvidos.
 
     Não use para um produto específico já nomeado (use get_product) nem para regras de
     pagamento ou frete (use calculate_payment ou search_policies).
@@ -158,6 +160,8 @@ def search_products(
         max_price: Orçamento máximo em reais; considera o menor preço possível (PIX ou
             promoção). Com orçamento, os itens mais próximos dele vêm primeiro.
         only_available: True (padrão) traz só o que pode ser vendido agora.
+        cheapest_first: True ordena do mais barato para o mais caro. Use para iniciante,
+            "o mais em conta" ou para ver as opções mais baratas que ficaram de fora.
         limit: Máximo de itens na resposta (padrão 6).
     """
     repo = _repo()
@@ -180,36 +184,59 @@ def search_products(
             "note": f"A loja não tem produtos de {result.category['name']} no momento.",
         }
 
-    products = result.products
-    if max_price is not None:
-        # With a budget, the options closest to it come first (the list is capped at 6).
-        products = sorted(products, key=lambda p: -_lowest_price(repo, p))
-
-    items, hidden = [], []
-    for product in products:
+    # (sort key, price shown to the customer, payload) for every product that passes the filters.
+    entries: list[tuple[tuple, float, dict]] = []
+    hidden = []
+    for product in result.products:
         offerable = catalog.is_offerable(product)
         if only_available and not offerable:
             hidden.append(product)
             continue
+        pix_only = False
         if offerable:
             quote = price_quote(repo, product)
-            if max_price is not None and quote.lowest_price > max_price:
+            lowest, shown = quote.lowest_price, quote.final_price
+            if max_price is not None and lowest > max_price:
                 continue
             if min_price is not None and quote.final_price < min_price:
                 continue
             payload = product_payload(repo, product)
             if max_price is not None and quote.final_price > max_price:
+                pix_only = True
                 payload["price_note"] = "Dentro do orçamento só pagando no PIX."
         else:
-            if max_price is not None and product["price_brl"] > max_price:
+            lowest = shown = product["price_brl"]
+            if max_price is not None and lowest > max_price:
                 continue
             payload = product_payload(repo, product)
-        items.append(payload)
+        if cheapest_first:
+            key: tuple = (lowest,)
+        elif max_price is not None:
+            # Closest to the budget first; items that only fit paying by PIX go after.
+            key = (pix_only, -lowest)
+        else:
+            key = ()  # keep the repository's relevance order
+        entries.append((key, shown, payload))
+    entries.sort(key=lambda entry: entry[0])
+    items = [payload for _, _, payload in entries]
 
     limit = max(1, min(limit, MAX_LIST_ITEMS))
     response: dict[str, Any] = {"ok": True, "items": items[:limit], "total_found": len(items)}
     if len(items) > limit:
-        response["note"] = f"Mostrando {limit} de {len(items)}; refine a busca para ver outros."
+        prices = [shown for _, shown, _ in entries]
+        response["price_range"] = f"{brl(min(prices))} a {brl(max(prices))}"
+        order = (
+            "os mais em conta"
+            if cheapest_first
+            else "os mais próximos do orçamento"
+            if max_price is not None
+            else "os mais relevantes"
+        )
+        response["note"] = (
+            f"Mostrando {limit} de {len(items)} ({order}). Diga ao cliente quantas opções "
+            f"existem e a faixa de preço de tabela ({response['price_range']}) e ofereça mostrar "
+            "as outras."
+        )
     if query and hidden and not items:
         response["not_available"] = [
             {
@@ -221,12 +248,6 @@ def search_products(
             for p in hidden[:3]
         ]
     return response
-
-
-def _lowest_price(repo: Repository, product: dict) -> float:
-    if catalog.is_offerable(product):
-        return price_quote(repo, product).lowest_price
-    return product["price_brl"]
 
 
 @tool(parse_docstring=True)

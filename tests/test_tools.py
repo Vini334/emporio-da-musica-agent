@@ -34,10 +34,30 @@ def test_violoes_ate_1000_only_offerable_closest_to_budget_first():
     # Offerable violões whose lowest price fits R$ 1000 (GF-3D 96 and SN-7C 113 excluded).
     assert result["total_found"] == 13
     assert len(result["items"]) == 6
-    gnf3 = result["items"][0]
-    assert gnf3["id"] == 101
-    assert gnf3["price"] == "R$ 1.049,00" and gnf3["pix_price"] == "R$ 996,55"
-    assert "PIX" in gnf3["price_note"]
+    # Items that fit at full price come first, closest to the budget.
+    assert result["items"][0]["id"] == 112  # Tagima TW-7, R$ 999,00
+    assert all("price_note" not in item for item in result["items"])
+
+
+def test_truncated_search_tells_how_many_and_the_price_range():
+    result = run(search_products, category="Violões", max_price=1000)
+    # The cheapest options (e.g. Tagima Memphis R$ 429,90) are hidden; the agent must know.
+    assert result["price_range"] == "R$ 429,90 a R$ 1.049,00"  # table prices
+    assert "6 de 13" in result["note"]
+
+
+def test_pix_only_items_go_after_full_price_ones():
+    result = run(search_products, category="Violões", max_price=1000, limit=6)
+    # GNF-3 (R$ 1.049,00, R$ 996,55 no PIX) is within budget only via PIX: never first.
+    assert result["items"][0]["id"] != 101
+
+
+def test_cheapest_first_shows_beginner_options():
+    result = run(search_products, category="Violões", max_price=1000, cheapest_first=True)
+    prices = [item["price"] for item in result["items"]]
+    assert prices[:3] == ["R$ 429,90", "R$ 459,90", "R$ 549,00"]
+    assert "Yamaha C40 Nylon Natural" in names(result)
+    assert "mais em conta" in result["note"]
 
 
 def test_violoes_ate_1000_never_lists_unsellable():
